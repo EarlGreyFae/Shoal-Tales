@@ -1,4 +1,4 @@
-# Shoreline Dredge
+# Shoal Tales
 
 Single-file browser prototype of the design in the "Dredging Game Ideas" doc. Open `index.html` — no build, saves to localStorage.
 

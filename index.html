@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Shoreline Dredge</title>
+<title>Shoal Tales</title>
 <style>
 :root{--bg:#0e1f2b;--panel:#16303f;--panel2:#1d3d50;--ink:#e8f1f5;--dim:#8fb0bf;--accent:#f2b84b;--good:#5fd39a;--bad:#ef6a6a;--line:#2a5068}
 *{box-sizing:border-box}
@@ -48,7 +48,7 @@ textarea{width:100%;min-height:110px;background:#0a161f;color:var(--ink);border:
 </head>
 <body>
 <header>
-  <h1>🌊 Shoreline Dredge</h1>
+  <h1>🌊 Shoal Tales</h1>
   <span class="stat">💰 <b id="hCoins"></b></span>
   <span class="stat">🔥 Sort streak <b id="hStreak"></b></span>
   <span class="stat">✨ Payout ×<b id="hMult"></b></span>
@@ -108,7 +108,7 @@ const SEED_COMMUNITY=[
 const TITLES=['Deckhand','Dredger','Salvager','Tidewright','Shorewarden','Harbour Legend'];
 
 /* ---------- state ---------- */
-const KEY='shoreline-dredge-v1';
+const KEY='shoal-tales-v1';
 const fresh=()=>({coins:0,life:0,goods:{},tray:[],sel:null,depth:0,unlocked:[1,0,0,0],up:{speed:0,basket:0,clean:0,luck:0},st:{},dredge:null,streak:0,best:0,tab:'dredge',sub:'library',uid:1,hauls:0});
 const persist=()=>({log:{},magic:[],seen:[],votes:{},outbox:[],tos:false,prestige:0});
 let S=Object.assign(fresh(),persist());
