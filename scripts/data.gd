@@ -13,28 +13,36 @@ const BINS := {
 
 # [name, emoji, bin]
 const JUNK := [
-	["Plastic bag", "🛍️", "plastic"],
-	["Soda bottle", "🥤", "plastic"],
-	["Six-pack ring", "⭕", "plastic"],
-	["Bucket", "🪣", "plastic"],
-	["Scrap sheet", "🔩", "metal"],
-	["Tin can", "🥫", "metal"],
-	["Old anchor", "⚓", "metal"],
-	["Rusty hand tools", "🔧", "metal"],
-	["Sunken equipment", "⚙️", "metal"],
+	["Grocery bag", "🛍️", "plastic"],
+	["Water bottle", "🥤", "plastic"],
+	["Flip-flop", "🩴", "plastic"],
+	["Beach bucket", "🪣", "plastic"],
+	["Pool noodle", "🌭", "plastic"],
+	["Six-pack rings", "⭕", "plastic"],
+	["Soda can", "🥫", "metal"],
+	["Bike wheel", "🛞", "metal"],
+	["Shopping cart", "🛒", "metal"],
+	["Rusty wrench", "🔧", "metal"],
+	["Car hubcap", "⚙️", "metal"],
+	["Boat anchor", "⚓", "metal"],
 	["Driftwood", "🪵", "wood"],
-	["Broken chair", "🪑", "wood"],
-	["Plank", "📏", "wood"],
-	["Water-logged sofa", "🛋️", "wood"],
-	["Radio", "📻", "electronics"],
-	["Circuit board", "💾", "electronics"],
-	["Old phone", "📱", "electronics"],
-	["Leaking barrel", "🛢️", "hazardous"],
-	["Battery", "🔋", "hazardous"],
-	["Chemical jug", "🧪", "hazardous"],
-	["Tangled trash", "🗑️", "mixed"],
-	["Soggy clothing", "👕", "mixed"],
-	["Sunken bundle", "🧺", "mixed"],
+	["Patio chair", "🪑", "wood"],
+	["Pallet plank", "📏", "wood"],
+	["Soggy couch", "🛋️", "wood"],
+	["TV remote", "📱", "electronics"],
+	["Bluetooth speaker", "🔊", "electronics"],
+	["Old laptop", "💻", "electronics"],
+	["Game controller", "🎮", "electronics"],
+	["Earbuds", "🎧", "electronics"],
+	["Flip phone", "📞", "electronics"],
+	["Car battery", "🔋", "hazardous"],
+	["Paint can", "🎨", "hazardous"],
+	["Motor oil jug", "🛢️", "hazardous"],
+	["Aerosol can", "🧯", "hazardous"],
+	["Tangled fishing line", "🧶", "mixed"],
+	["Hoodie", "👕", "mixed"],
+	["Sneaker", "👟", "mixed"],
+	["Backpack", "🎒", "mixed"],
 ]
 
 # [name, emoji, base value]
@@ -49,30 +57,30 @@ const FISH := [
 ]
 
 const CURIOS := [
-	["Jewelry", "💍"],
-	["Vase", "🏺"],
-	["Compass", "🧭"],
-	["Mantel clock", "🕰️"],
-	["Little idol", "🗿"],
-	["Urn", "⚱️"],
-	["Knick-knack", "🧸"],
-	["Music box", "🎼"],
-	["Old coin", "🪙"],
-	["Spyglass", "🔭"],
+	["Class ring", "💍"],
+	["Snow globe", "🔮"],
+	["Instant camera", "📷"],
+	["Wristwatch", "⌚"],
+	["Action figure", "🧸"],
+	["Bowling trophy", "🏆"],
+	["Locket", "📿"],
+	["Cassette mixtape", "📼"],
+	["Souvenir mug", "☕"],
+	["Motel room key", "🔑"],
 ]
 
-const ANIMALS := [["Sea turtle", "🐢"], ["Seal pup", "🦭"], ["Duck", "🦆"], ["Eel", "🐍"]]
+const ANIMALS := [["Sea turtle", "🐢"], ["Seal pup", "🦭"], ["Seagull", "🐦"], ["Otter", "🦦"]]
 
 # [rarity, value multiplier, weight out of 100]
 const RARITY := [["common", 1.0, 60], ["uncommon", 2.5, 25], ["rare", 6.0, 11], ["epic", 15.0, 4]]
 
 const MAGIC := [
-	{"id": "pearl", "n": "Tideglass Pearl", "e": "🫧", "d": "+5% payout"},
-	{"id": "tooth", "n": "Kraken's Tooth", "e": "🦷", "d": "−5% dredge time"},
-	{"id": "lantern", "n": "Moonlit Lantern", "e": "🏮", "d": "+1 basket slot"},
-	{"id": "crown", "n": "Coral Crown", "e": "👑", "d": "+15% curio value"},
-	{"id": "compass", "n": "Storm Compass", "e": "🧭", "d": "Better curio rarity"},
-	{"id": "heart", "n": "Heart of the Shore", "e": "💙", "d": "+10% payout"},
+	{"id": "pearl", "n": "Warm Sea Glass", "e": "🫧", "d": "+5% payout"},
+	{"id": "tooth", "n": "Stopped Pocket Watch", "e": "⏱️", "d": "−5% dredge time"},
+	{"id": "lantern", "n": "Radio That Hums When Off", "e": "📻", "d": "+1 basket slot"},
+	{"id": "crown", "n": "Photo of an Empty Room", "e": "🖼️", "d": "+15% curio value"},
+	{"id": "compass", "n": "Compass That Points Inland", "e": "🧭", "d": "Better curio rarity"},
+	{"id": "heart", "n": "Lighthouse Key", "e": "🗝️", "d": "+10% payout"},
 ]
 
 # w = relative odds of each kind of catch at this depth
@@ -147,26 +155,27 @@ const RECIPES := [
 ]
 
 # PLACEHOLDER lore - replace with your own Lore Letters.
+# Tone: sleepy modern town where something is quietly wrong.
 const LETTERS := [
 	{
-		"id": "d1", "dev": true, "from": "The Harbourmaster",
-		"t": "If you are reading this, the tide brought you. Good. The shore has been waiting for someone with patient hands.",
+		"id": "d1", "dev": true, "from": "Unsigned",
+		"t": "Welcome to town. The diner opens at six, the ferry doesn't run on Sundays, and nobody talks about the lighthouse. You'll fit right in.",
 	},
 	{
-		"id": "d2", "dev": true, "from": "The Harbourmaster",
-		"t": "The village sits where three shores fold together. Bring what you pull from the deep and they will remember your name.",
+		"id": "d2", "dev": true, "from": "Unsigned",
+		"t": "Funny thing about this bay. The tide goes out twice a day, like anywhere. Some nights it comes back in three times.",
 	},
 	{
-		"id": "d3", "dev": true, "from": "The Harbourmaster",
-		"t": "A fisherman is only a craftsman who has not yet learned what the sea is offering. Sort well. Waste nothing.",
+		"id": "d3", "dev": true, "from": "Unsigned",
+		"t": "If you dredge up anything with my name on it, throw it back. I'm serious. I haven't lost anything yet.",
 	},
 	{
-		"id": "d4", "dev": true, "from": "The Harbourmaster",
-		"t": "There are six lights lost in the water. Find them all and the shore will open a fourth door.",
+		"id": "d4", "dev": true, "from": "Unsigned",
+		"t": "Six things came out of the water the year the lighthouse went dark. Everyone in town knows. Nobody in town will tell you.",
 	},
 	{
-		"id": "d5", "dev": true, "from": "The Harbourmaster",
-		"t": "When you have everything, begin again. The second tide is always kinder to the one who has walked the first.",
+		"id": "d5", "dev": true, "from": "Unsigned",
+		"t": "You've been here before. Don't worry. It's always a little easier the second time.",
 	},
 ]
 
@@ -186,4 +195,6 @@ const SEED_COMMUNITY := [
 	},
 ]
 
-const TITLES := ["Deckhand", "Dredger", "Salvager", "Tidewright", "Shorewarden", "Harbour Legend"]
+const TITLES := [
+	"New in Town", "Weekend Dredger", "Salvager", "Local Regular", "Shore Warden", "Town Legend"
+]
