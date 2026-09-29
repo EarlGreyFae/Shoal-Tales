@@ -25,7 +25,7 @@ const TABS := [
 	["storage", "📦 Storage"],
 	["craft", "🔨 Stations"],
 	["desk", "🗒️ Desk"],
-	["shore", "🏘️ Shore"],
+	["town", "🏘️ Town"],
 	["work", "🛠️ Work Table"],
 	["map", "🗺️ Map"],
 	["guild", "🤝 Guild"],
@@ -33,6 +33,7 @@ const TABS := [
 const DragCard := preload("res://scripts/ui/drag_card.gd")
 const BinDrop := preload("res://scripts/ui/bin_drop.gd")
 const DESK_TABS := [
+	["crow", "🐦‍⬛ Crow"],
 	["library", "Letters"],
 	["log", "Collector's Log"],
 	["magic", "Magic Curios"],
@@ -128,6 +129,7 @@ func _ready() -> void:
 	Game.letter_opened.connect(show_letter)
 	Game.sorted.connect(_on_sorted)
 	Game.hauled.connect(_on_hauled)
+	Game.crow_arrived.connect(Sfx.play.bind("crow"))
 	shown_coins = Game.s.coins
 	refresh()
 
@@ -267,14 +269,17 @@ func refresh() -> void:
 			if not first:
 				show_toast("New: %s" % t[1])
 				Sfx.play("coin", 0.8)
-	if not Game.tab_unlocked(s.tab):
+	if not open_tabs.any(func(t): return t[0] == s.tab):
 		s.tab = "dredge"
 
 	for c in tab_bar.get_children():
 		tab_bar.remove_child(c)
 		c.queue_free()
 	for t in open_tabs:
-		var b := _button(t[1], Game.set_tab.bind(t[0]))
+		var tab_text: String = t[1]
+		if t[0] == "desk" and not s.crow_unread.is_empty():
+			tab_text += "  (%d)" % s.crow_unread.size()
+		var b := _button(tab_text, Game.set_tab.bind(t[0]))
 		if s.tab == t[0]:
 			b.add_theme_stylebox_override("normal", _box(C_ACCENT, C_ACCENT, 8, 1, 8))
 			b.add_theme_stylebox_override("hover", _box(C_ACCENT, C_ACCENT, 8, 1, 8))
@@ -300,8 +305,8 @@ func refresh() -> void:
 			_page_work()
 		"map":
 			_page_map()
-		"shore":
-			_page_shore()
+		"town":
+			_page_town()
 		"guild":
 			_page_guild()
 
@@ -551,28 +556,26 @@ func _page_storage() -> void:
 		cl.size_flags_horizontal = SIZE_EXPAND_FILL
 		cr.add_child(cl)
 		cr.add_child(_label("%dc" % roundi(Game.cooler_value())))
-		cr.add_child(_button("Sell", Game.sell_cooler, false, "coin"))
+	for g in s.goods:
+		var o: Dictionary = s.goods[g]
+		var r := _row(v)
+		var name_l := _label("%s ×%d" % [_goods_name(g), o.n])
+		name_l.size_flags_horizontal = SIZE_EXPAND_FILL
+		r.add_child(name_l)
+		r.add_child(_label("%dc" % roundi(o.v)))
 	if s.goods.is_empty() and s.cooler.is_empty():
-		v.add_child(_para("Nothing stored. Sort some junk first.", C_DIM))
-	else:
-		for g in s.goods:
-			var o: Dictionary = s.goods[g]
-			var r := _row(v)
-			var name_l := _label("%s ×%d" % [_goods_name(g), o.n])
-			name_l.size_flags_horizontal = SIZE_EXPAND_FILL
-			r.add_child(name_l)
-			r.add_child(_label("%dc" % roundi(o.v)))
-			r.add_child(_button("Sell", Game.sell.bind(g), false, "coin"))
+		v.add_child(_para("Nothing stored. Sort some junk and cool some fish first.", C_DIM))
+	elif s.emporium:
 		v.add_child(HSeparator.new())
-		var b := _button("Sell everything", Game.sell_all, false, "coin")
+		var b := _button("Sell everything at the Emporium", Game.sell_all, false, "coin")
 		b.size_flags_horizontal = SIZE_SHRINK_BEGIN
 		v.add_child(b)
-	_card().add_child(
-		_para(
-			"Tip: sorted bins pay more when fed through a station first. Build stations to go from selling everything to breaking it all down.",
-			C_DIM
-		)
+	var tip: String = (
+		"Sell your goods to the people in town. Walt at the diner buys fish; Dot at the salvage yard buys sorted bins."
+		if Game.tab_unlocked("town")
+		else "Nobody's buying out here. Dress a fish on the Cutting Board, and maybe someone will notice."
 	)
+	_card().add_child(_para(tip, C_DIM))
 
 
 func _page_craft() -> void:
@@ -646,7 +649,11 @@ func _page_desk() -> void:
 		if s.sub == t[0]:
 			b.add_theme_stylebox_override("normal", _box(C_PANEL2, C_ACCENT, 8, 2, 8))
 		tabs.add_child(b)
+	if not s.crow_unread.is_empty() and s.sub != "crow":
+		_card().add_child(_para("🐦‍⬛ The crow is waiting on your desk with a letter.", C_ACCENT))
 	match s.sub:
+		"crow":
+			_desk_crow()
 		"library":
 			_desk_library()
 		"log":
@@ -657,19 +664,40 @@ func _page_desk() -> void:
 			_desk_rules()
 
 
+func _desk_crow() -> void:
+	var s: Dictionary = Game.s
+	var v := _card("🐦‍⬛ The crow's letters")
+	if s.crow_unread.is_empty() and s.story.is_empty():
+		v.add_child(_para("No crow has visited yet.", C_DIM))
+	for id in s.crow_unread:
+		var r := _row(v)
+		var l := _label("✉️ A sealed letter, still damp.")
+		l.size_flags_horizontal = SIZE_EXPAND_FILL
+		r.add_child(l)
+		r.add_child(_button("Open", Game.read_letter.bind(id), false, "pickup"))
+	for id in Data.STORY_LETTERS:
+		if not s.story.has(id + "_read"):
+			continue
+		var letter: Dictionary = Data.STORY_LETTERS[id]
+		var r := _row(v)
+		var l := _label("📜 " + letter.t.left(60) + "…", 15, C_DIM)
+		l.size_flags_horizontal = SIZE_EXPAND_FILL
+		l.clip_text = true
+		r.add_child(l)
+		r.add_child(_button("Re-read", show_letter.bind(letter)))
+
+
 func _desk_library() -> void:
 	var s: Dictionary = Game.s
 	var v := _card("Letter library (%d found)" % s.seen.size())
 	var shown := 0
-	for l in Data.STORY_LETTERS.values() + Data.LETTERS + Data.SEED_COMMUNITY + s.outbox:
+	for l in Data.LETTERS + Data.SEED_COMMUNITY + s.outbox:
 		var mine: bool = l.get("mine", false)
 		if not (mine or s.seen.has(l.id)):
 			continue
 		shown += 1
 		var dev: bool = l.get("dev", false)
 		var head: String = ("🖋 Lore Letter · " if dev else "✉️ ") + str(l.from)
-		if l.get("crow", false):
-			head = "🐦‍⬛ From " + str(l.from)
 		if mine:
 			head += "  (approved)" if l.approved else "  (awaiting review)"
 		var lv := _card(head, v, C_PANEL2)
@@ -773,17 +801,103 @@ func _page_map() -> void:
 		v.add_child(b)
 
 
-func _page_shore() -> void:
-	var v := _card("🏘️ The shore")
-	v.add_child(
+func _page_town() -> void:
+	var s: Dictionary = Game.s
+	var id: String = s.town_sel
+	if id != "" and Game.npc_unlocked(id):
+		_npc_view(id)
+		return
+	var head := _card("🏘️ Town")
+	head.add_child(
 		_para(
-			"The town sits just past the breakwater: a diner, a hardware store, a post office, and a lighthouse nobody mentions. Someone left the dock light on for you."
+			"A sleepy little town past the breakwater: a diner, a salvage yard, a hardware store, and a lighthouse nobody mentions.",
+			C_DIM
 		)
 	)
-	v.add_child(_para("The town itself is being built next.", C_DIM))
-	var b := _button("Re-read the crow's letter", show_letter.bind(Data.STORY_LETTERS.crow1))
+	var grid := _grid(content, 2)
+	for n in Data.NPC_ORDER:
+		if not Game.npc_unlocked(n):
+			continue
+		var npc: Dictionary = Data.NPCS[n]
+		var v := _card("", grid, C_PANEL)
+		v.custom_minimum_size.x = 420
+		var r := _row(v)
+		r.add_child(_label(npc.e, 40))
+		var col := VBoxContainer.new()
+		col.size_flags_horizontal = SIZE_EXPAND_FILL
+		col.add_child(_label(npc.n, 18, C_ACCENT))
+		col.add_child(_label(npc.role, 14, C_DIM))
+		r.add_child(col)
+		r.add_child(_button("Visit", Game.visit.bind(n), false, "pickup"))
+	if Game.can_open_emporium():
+		var ev := _card("🏬 An empty storefront on Main Street")
+		ev.add_child(
+			_para(
+				"Open your own Emporium and sell everything at once, straight from Storage.", C_DIM
+			)
+		)
+		var b := _button(
+			"Open it — %dc" % Data.EMPORIUM_COST,
+			Game.open_emporium,
+			s.coins < Data.EMPORIUM_COST,
+			"coin"
+		)
+		b.size_flags_horizontal = SIZE_SHRINK_BEGIN
+		ev.add_child(b)
+
+
+func _npc_view(id: String) -> void:
+	var npc: Dictionary = Data.NPCS[id]
+	var back := _button("← Back to town", Game.visit.bind(""))
+	back.size_flags_horizontal = SIZE_SHRINK_BEGIN
+	content.add_child(back)
+	var v := _card()
+	var r := _row(v)
+	r.add_child(_label(npc.e, 56))
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = SIZE_EXPAND_FILL
+	col.add_child(_label(npc.n, 22, C_ACCENT))
+	col.add_child(_label(npc.role, 15, C_DIM))
+	# Changes with each haul, not with every redraw.
+	col.add_child(_para(npc.lines[int(Game.s.hauls) % npc.lines.size()], C_INK, 16))
+	r.add_child(col)
+
+	var shop := _card("Sells to %s" % npc.n)
+	var any := false
+	for g in npc.buys:
+		var h: Dictionary = Game.holding(g)
+		if int(h.n) <= 0:
+			continue
+		any = true
+		var gr := _row(shop)
+		var good_name: String = "🧊 Raw fish" if g == "cooler" else _goods_name(g)
+		var nl := _label("%s ×%d" % [good_name, h.n])
+		nl.size_flags_horizontal = SIZE_EXPAND_FILL
+		gr.add_child(nl)
+		gr.add_child(_label("%dc" % roundi(h.v)))
+		gr.add_child(_button("Sell", Game.sell_to.bind(id, g), false, "coin"))
+	if not any:
+		shop.add_child(_para("You don't have anything %s wants right now." % npc.n, C_DIM))
+
+	if not Game.s.met.has(id):
+		_show_intro.call_deferred(id)
+
+
+## First visit: the character introduces themselves on paper.
+func _show_intro(id: String) -> void:
+	var npc: Dictionary = Data.NPCS[id]
+	var v := _open_modal()
+	v.add_child(_label("%s %s — %s" % [npc.e, npc.n, npc.role], 18, C_PAPER_INK))
+	v.add_child(_para(npc.intro, C_PAPER_INK, 17))
+	var b := _button("Deal.", _close_intro.bind(id))
 	b.size_flags_horizontal = SIZE_SHRINK_BEGIN
 	v.add_child(b)
+	b.grab_focus()
+
+
+func _close_intro(id: String) -> void:
+	_close_modal()
+	Game.meet(id)
 
 
 func _page_guild() -> void:
@@ -868,7 +982,6 @@ func show_letter(letter: Dictionary) -> void:
 	var head: String = ("🖋 Lore Letter from " if dev else "✉️ Letter from ") + str(letter.from)
 	if letter.get("crow", false):
 		head = "🐦‍⬛ A letter from " + str(letter.from)
-		Sfx.play("crow")
 	v.add_child(_label(head, 18, C_PAPER_INK))
 	v.add_child(_para(letter.t, C_PAPER_INK, 18))
 	var b := _button("Fold it away", _close_modal)

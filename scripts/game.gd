@@ -8,6 +8,8 @@ signal letter_opened(letter: Dictionary)
 signal sorted(bin: String, correct: bool, weight: int, amount: float)
 ## A fresh catch just came up.
 signal hauled
+## The crow dropped a new letter at the Desk.
+signal crow_arrived
 
 const SAVE_PATH := "user://shoal_tales_save.json"
 const MAX_PENDING_LETTERS := 3
@@ -57,12 +59,14 @@ func _fresh() -> Dictionary:
 		"streak": 0,
 		"best": 0,
 		"tab": "dredge",
-		"sub": "library",
+		"sub": "crow",
 		"uid": 1,
 		"hauls": 0,
 		"cooler": [],  # raw fish waiting for the Cutting Board
 		"dressed": 0,
 		"since": {},  # handled since the last station install; drives hidden station unlocks
+		"emporium": false,
+		"town_sel": "",
 	}
 
 
@@ -77,7 +81,9 @@ func _persistent() -> Dictionary:
 		"tos": false,
 		"prestige": 0,
 		"empties": 0,
-		"story": {},  # story beats that have happened, e.g. "crow"
+		"story": {},  # story beats that have happened: letter ids, and "<id>_read"
+		"crow_unread": [],  # letters waiting at the Desk
+		"met": {},  # townsfolk whose introduction you've seen
 	}
 
 
@@ -120,6 +126,11 @@ func _load() -> void:
 	s.dressed = int(s.dressed)
 	for k in s.since:
 		s.since[k] = int(s.since[k])
+	# Older saves had the crow's letter pop up instead of waiting at the Desk.
+	if s.story.has("crow"):
+		s.story.crow1 = true
+		s.story.crow1_read = true
+		s.story.erase("crow")
 	# Older saves kept raw fish as one lump; turn it into individual fish.
 	if s.goods.has("fish_raw"):
 		var lump: Dictionary = s.goods["fish_raw"]
@@ -201,13 +212,16 @@ func tab_unlocked(t: String) -> bool:
 		"work":
 			return s.life > 0.0 or s.up.basket > 0
 		"desk":
-			return not s.seen.is_empty() or not s.log.is_empty() or s.empties > 0
+			return (
+				not s.seen.is_empty() or not s.log.is_empty() or s.empties > 0
+				or not s.story.is_empty()
+			)
 		"map":
 			return basket() >= 12 or s.depth > 0
 		"guild":
 			return false  # needs the online server
-		"shore":
-			return s.story.has("crow")
+		"town":
+			return s.story.has("crow1_read")
 	return true
 
 
@@ -287,7 +301,7 @@ func _new_item(kind: String) -> Dictionary:
 			var base: float = Data.BINS[j[2]].p * randf_range(1.0, 1.5)
 			it.merge({"name": j[0], "e": j[1], "bin": j[2], "w": j[3], "base": base})
 		"fish":
-			var f: Array = Data.FISH.pick_random()
+			var f: Array = Data.FISH_BY_DEPTH[s.depth].pick_random()
 			it.merge({"name": f[0], "e": f[1], "w": f[3], "base": f[2] * randf_range(0.8, 1.4)})
 		"curio":
 			var c: Array = Data.CURIOS.pick_random()
@@ -323,6 +337,9 @@ func _haul() -> Array:
 			)
 		else:
 			out.append(_new_item(_pick_kind()))
+	# The very first catch always has a fish, so the Cutting Board (and the crow) come early.
+	if s.hauls == 1 and not out.any(func(i): return i.kind == "fish"):
+		out[out.size() - 1] = _new_item("fish")
 	return out
 
 
@@ -525,12 +542,7 @@ func dress_fish(uid: int) -> void:
 	s.dressed += 1
 	_count("dressed")
 	_commit()
-	if not s.story.has("crow"):
-		s.story.crow = true
-		var letter: Dictionary = Data.STORY_LETTERS.crow1
-		s.seen.append(letter.id)
-		_commit()
-		letter_opened.emit(letter)
+	deliver_letter("crow1")
 
 
 func open_crate(uid: int) -> void:
@@ -638,6 +650,8 @@ func sell(g: String) -> void:
 
 
 func sell_all() -> void:
+	if not s.emporium:
+		return
 	var total := 0.0
 	for g in s.goods:
 		total += s.goods[g].v
@@ -673,6 +687,7 @@ func build_station(k: String) -> void:
 	s.coins -= st.cost
 	s.st[k] = true
 	s.since = {}
+	deliver_letter("crow_" + k)
 	toast.emit("Installed the %s" % st.n)
 	for r in Data.SORT_RULES:
 		if r.st == k:
@@ -749,3 +764,77 @@ func send_letter(text: String, signed: bool) -> bool:
 func vote(id: String, v: int) -> void:
 	s.votes[id] = 0 if int(s.votes.get(id, 0)) == v else v
 	_commit()
+
+
+# ---------- the crow ----------
+
+
+## The crow brings a story letter to the Desk, once per letter ever.
+func deliver_letter(id: String) -> void:
+	if s.story.has(id) or not Data.STORY_LETTERS.has(id):
+		return
+	s.story[id] = true
+	s.crow_unread.append(id)
+	toast.emit("A crow landed on your Desk with a letter.")
+	_commit()
+	crow_arrived.emit()
+
+
+func read_letter(id: String) -> void:
+	var letter: Dictionary = Data.STORY_LETTERS[id]
+	s.crow_unread.erase(id)
+	s.story[id + "_read"] = true
+	if not s.seen.has(id):
+		s.seen.append(id)
+	_commit()
+	letter_opened.emit(letter)
+
+
+# ---------- town ----------
+
+
+func npc_unlocked(id: String) -> bool:
+	var u: Dictionary = Data.NPCS[id].unlock
+	if u.has("story"):
+		return s.story.has(u.story)
+	return s.st.has(u.station)
+
+
+func visit(id: String) -> void:
+	s.town_sel = id
+	_commit()
+
+
+func meet(id: String) -> void:
+	s.met[id] = true
+	_commit()
+
+
+## How much of a good you're holding and what it's worth. "cooler" is raw fish.
+func holding(good: String) -> Dictionary:
+	if good == "cooler":
+		return {"n": s.cooler.size(), "v": cooler_value()}
+	return s.goods.get(good, {"n": 0, "v": 0.0})
+
+
+func sell_to(npc: String, good: String) -> void:
+	if not npc_unlocked(npc) or not Data.NPCS[npc].buys.has(good):
+		return
+	if good == "cooler":
+		sell_cooler()
+	else:
+		sell(good)
+
+
+func can_open_emporium() -> bool:
+	return next_station() == "" and not s.emporium
+
+
+func open_emporium() -> void:
+	if not can_open_emporium() or s.coins < Data.EMPORIUM_COST:
+		return
+	s.coins -= Data.EMPORIUM_COST
+	s.emporium = true
+	toast.emit("Your Emporium is open. You can sell everything at once from Storage.")
+	_commit()
+	deliver_letter("crow_emporium")

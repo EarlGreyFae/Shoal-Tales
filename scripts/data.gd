@@ -101,15 +101,37 @@ const SORT_RULES := [
 	{"st": "recycler", "item": "Tangled fishing line", "bin": "plastic", "hint": "The Recycling Machine can reclaim the nylon line."},
 ]
 
+# Fish by depth: each depth draws fish from a different part of the world.
 # [name, emoji, base value, weight]
-const FISH := [
-	["Sardine", "🐟", 6.0, 1],
-	["Snapper", "🐠", 10.0, 2],
-	["Squid", "🦑", 14.0, 2],
-	["Crab", "🦀", 16.0, 2],
-	["Kelp", "🌿", 5.0, 1],
-	["Octopus", "🐙", 24.0, 3],
-	["Lobster", "🦞", 30.0, 3],
+const FISH_BY_DEPTH := [
+	[  # Shallows: the local catch
+		["Sardine", "🐟", 6.0, 1],
+		["Mackerel", "🐟", 8.0, 1],
+		["Flounder", "🐟", 10.0, 2],
+		["Rock crab", "🦀", 12.0, 2],
+		["Sea bass", "🐟", 14.0, 2],
+	],
+	[  # Coral Reef: warm-water fish that have no business in this bay
+		["Parrotfish", "🐠", 14.0, 2],
+		["Clownfish", "🐠", 12.0, 1],
+		["Lionfish", "🐡", 18.0, 2],
+		["Spiny lobster", "🦞", 26.0, 3],
+		["Reef octopus", "🐙", 22.0, 3],
+	],
+	[  # Deep Trench: cold, dark water from far away
+		["Lanternfish", "🐟", 16.0, 1],
+		["Hake", "🐟", 20.0, 2],
+		["King crab", "🦀", 34.0, 4],
+		["Giant squid (a small one)", "🦑", 30.0, 4],
+		["Monkfish", "🐡", 26.0, 3],
+	],
+	[  # The Abyss: things nobody can identify
+		["Anglerfish", "🐡", 40.0, 3],
+		["Vampire squid", "🦑", 44.0, 3],
+		["Gulper eel", "🐍", 38.0, 3],
+		["Ghost shark", "🦈", 60.0, 5],
+		["A fish with no name", "🐟", 80.0, 2],
+	],
 ]
 
 const CURIOS := [
@@ -259,12 +281,95 @@ const LETTERS := [
 ]
 
 # Story letters arrive at set moments, never in bottles.
+# The crow brings these to the Desk when something new opens up. Keys are also story beats.
 const STORY_LETTERS := {
 	"crow1": {
 		"id": "crow1", "dev": true, "crow": true, "from": "a crow",
-		"t": "A crow lands on the railing, drops a folded diner receipt at your feet, and stares at you until you pick it up. On the back, in pencil:\n\n\"Nice knife work. Come ashore sometime. The diner's open till six, and people here have been expecting you.\"\n\nWhen you look up, the crow is gone. You never heard it leave.",
+		"t": "A crow lands on the railing, drops a folded diner receipt at your feet, and stares at you until you pick it up. On the back, in pencil:\n\n\"Nice knife work. The cook at the Low Tide Diner needs fish, and you have fish. Come ashore.\"\n\nWhen you look up, the crow is gone. You never heard it leave.",
+	},
+	"crow_oven": {
+		"id": "crow_oven", "dev": true, "crow": true, "from": "a crow",
+		"t": "The crow is back, with a recipe card this time. Most of it is smudged. The only legible line: \"Cook it low and slow, and it will tell you where it came from.\"",
+	},
+	"crow_carpentry": {
+		"id": "crow_carpentry", "dev": true, "crow": true, "from": "a crow",
+		"t": "A wood shaving, curled like a ribbon, tucked under the crow's wing. Written along it: \"The antiques shop on Harbor Street pays well for honest work. Ask about the clock in the window. Don't ask twice.\"",
+	},
+	"crow_crucible": {
+		"id": "crow_crucible", "dev": true, "crow": true, "from": "a crow",
+		"t": "A hardware store receipt for one (1) padlock, paid in cash, dated forty years ago. On the back: \"The lighthouse door was locked from the inside.\"",
+	},
+	"crow_recycler": {
+		"id": "crow_recycler", "dev": true, "crow": true, "from": "a crow",
+		"t": "A torn page from a tide table. Someone has circled a date that hasn't happened yet, and written: \"Everything comes back. That's the whole trouble with this bay.\"",
+	},
+	"crow_emporium": {
+		"id": "crow_emporium", "dev": true, "crow": true, "from": "a crow",
+		"t": "A brass key on a string, and a note: \"Your own shop, on Main Street. The last owner left in a hurry. Keep the lights on at night.\"",
 	},
 }
+
+# People in town. Each one buys the goods from the stations they care about.
+# "unlock" is a story beat (a crow letter that has been read) or a station on board.
+const NPC_ORDER := ["cook", "salvage", "antiques", "hardware", "coop"]
+const NPCS := {
+	"cook": {
+		"n": "Walt", "role": "Cook at the Low Tide Diner", "e": "👨‍🍳",
+		"unlock": {"story": "crow1_read"},
+		"buys": ["cooler", "fish_dressed", "meal"],
+		"intro": "The diner is empty except for a tired man in an apron, scraping a grill that's already clean. He reads the crow's receipt twice.\n\n\"Don't know who sent this. Don't much care, either.\" He sets down the scraper. \"My fish supplier got foreclosed on last month. Shore dredger, like you. Went bankrupt trying to make a living off those waters. Maybe he just wasn't lucky.\"\n\nHe looks out the window at the bay. \"Strange shore, this. Fish turn up here that belong on the other side of the world. The deeper you drop, the stranger they get. You bring me what you catch, I'll pay you fair for it. Deal?\"",
+		"lines": [
+			"\"Morning. What'd the bay give you today?\"",
+			"\"Had a guy in yesterday swear he saw a parrotfish off the pier. In October.\"",
+			"\"Dressed fish sells better. My knife hand isn't what it was.\"",
+			"\"Coffee's on the house for suppliers. Don't tell anybody.\"",
+		],
+	},
+	"salvage": {
+		"n": "Dot", "role": "Runs the salvage yard", "e": "🧰",
+		"unlock": {"story": "crow1_read"},
+		"buys": ["bin_plastic", "bin_metal", "bin_wood", "bin_electronics", "bin_hazardous", "bin_mixed"],
+		"intro": "Behind a chain-link fence, someone in coveralls is sorting a mountain of scrap by hand. They don't look up.\n\n\"Walt said you'd come by. I take anything that's sorted. Anything that isn't sorted, I don't want to hear about.\"",
+		"lines": [
+			"\"Sorted? Good. Put it on the scale.\"",
+			"\"Found a wedding ring in a load of hubcaps once. Still don't know whose.\"",
+			"\"Hazardous goes in the yellow drum. Always the yellow drum.\"",
+		],
+	},
+	"antiques": {
+		"n": "Rosalind", "role": "Albright Antiques & Oddities", "e": "🕰️",
+		"unlock": {"station": "carpentry"},
+		"buys": ["knick"],
+		"intro": "A bell rings as you open the door. The shop is full of clocks, and every one of them is stopped at a different time.\n\n\"Handmade pieces? From driftwood?\" She turns one of your carvings over in her hands. \"People pay for things with a story. I'll take whatever you make.\"",
+		"lines": [
+			"\"Mind the clocks. They're sensitive.\"",
+			"\"That one in the window? Not for sale. Never has been.\"",
+		],
+	},
+	"hardware": {
+		"n": "Hank", "role": "Hank's Hardware", "e": "🔨",
+		"unlock": {"station": "crucible"},
+		"buys": ["ingot"],
+		"intro": "\"You're melting down scrap out there? On a boat?\" He whistles. \"Bring me clean ingots and I'll buy every one. Nobody around here does their own casting anymore.\"",
+		"lines": [
+			"\"Need a padlock? Everyone's been buying padlocks this week.\"",
+			"\"Good weight on these. Real good.\"",
+		],
+	},
+	"coop": {
+		"n": "Priya", "role": "The Makers' Co-op", "e": "🧵",
+		"unlock": {"station": "recycler"},
+		"buys": ["material"],
+		"intro": "The co-op smells like sawdust and solder. Priya waves you in with a glue gun.\n\n\"Reclaimed materials? From the bay? Oh, we'll use every scrap. People here make beautiful things out of what gets thrown away.\"",
+		"lines": [
+			"\"Somebody made a whole lamp out of your fishing line!\"",
+			"\"Everything's useful to someone.\"",
+		],
+	},
+}
+
+# Opens once every station is installed: sell everything at once from Storage.
+const EMPORIUM_COST := 500000
 
 # Stand-ins for player letters until there is a server to share them.
 const SEED_COMMUNITY := [
