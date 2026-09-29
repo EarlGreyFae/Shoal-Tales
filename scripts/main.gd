@@ -11,6 +11,7 @@ const C_INK := Color("e8f1f5")
 const C_DIM := Color("8fb0bf")
 const C_ACCENT := Color("f2b84b")
 const C_GOOD := Color("5fd39a")
+const C_BAD := Color("ef6a6a")
 const C_PAPER := Color("f4ead2")
 const C_PAPER_INK := Color("3b2f1c")
 const RAR_COLORS := {
@@ -28,6 +29,8 @@ const TABS := [
 	["map", "🗺️ Map"],
 	["guild", "🤝 Guild"],
 ]
+const DragCard := preload("res://scripts/ui/drag_card.gd")
+const BinDrop := preload("res://scripts/ui/bin_drop.gd")
 const DESK_TABS := [
 	["library", "Letters"],
 	["log", "Collector's Log"],
@@ -44,9 +47,16 @@ const RULES := [
 ]
 
 var header_labels := {}
+var root_box: VBoxContainer
 var tab_bar: HBoxContainer
 var content: VBoxContainer
 var progress: ProgressBar
+var progress_label: Label
+var bin_nodes := {}
+var pending_impact := {}
+var pending_pop := false
+var shown_coins := 0.0
+var known_tabs := []
 var toasts: VBoxContainer
 var modal: Control
 var confirm: ConfirmationDialog
@@ -65,6 +75,7 @@ func _ready() -> void:
 	root.set_anchors_preset(PRESET_FULL_RECT)
 	root.add_theme_constant_override("separation", 0)
 	add_child(root)
+	root_box = root
 
 	var header_panel := PanelContainer.new()
 	header_panel.add_theme_stylebox_override("panel", _box(C_HEADER, C_LINE, 0, 0, 12))
@@ -113,12 +124,24 @@ func _ready() -> void:
 	Game.changed.connect(refresh, CONNECT_DEFERRED)
 	Game.toast.connect(show_toast)
 	Game.letter_opened.connect(show_letter)
+	Game.sorted.connect(_on_sorted)
+	Game.hauled.connect(_on_hauled)
+	shown_coins = Game.s.coins
 	refresh()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if is_instance_valid(progress):
-		progress.value = Game.dredge_progress() * 100.0
+		var p: float = Game.dredge_progress()
+		progress.value = p * 100.0
+		if Game.dredging():
+			progress_label.text = "Lowering the basket…" if p < 0.5 else "Hauling it up…"
+	# Coins count up rather than jumping.
+	var target: float = Game.s.coins
+	shown_coins = lerpf(shown_coins, target, 1.0 - exp(-delta * 8.0))
+	if absf(target - shown_coins) < 0.5:
+		shown_coins = target
+	header_labels.coins.text = "💰 %d" % roundi(shown_coins)
 
 
 # ---------- building blocks ----------
@@ -183,10 +206,12 @@ func _para(text: String, color := C_INK, font_size := 16) -> Label:
 	return l
 
 
-func _button(text: String, action: Callable, disabled := false) -> Button:
+func _button(text: String, action: Callable, disabled := false, sound := "") -> Button:
 	var b := Button.new()
 	b.text = text
 	b.disabled = disabled
+	if sound != "":
+		b.pressed.connect(Sfx.play.bind(sound))
 	b.pressed.connect(action)
 	return b
 
@@ -227,16 +252,26 @@ func _grid(parent: Control, cols: int) -> GridContainer:
 
 func refresh() -> void:
 	var s: Dictionary = Game.s
-	header_labels.coins.text = "💰 %d" % roundi(s.coins)
 	header_labels.streak.text = "🔥 Sort streak %d" % s.streak
 	header_labels.mult.text = "✨ Payout ×%.2f" % (Game.g_mult() * Game.streak_mult())
 	var stars: String = "  ★%d" % s.prestige if s.prestige > 0 else ""
 	header_labels.title.text = "🏅 " + Game.title() + stars
 
+	var open_tabs := TABS.filter(func(t): return Game.tab_unlocked(t[0]))
+	var first := known_tabs.is_empty()
+	for t in open_tabs:
+		if not known_tabs.has(t[0]):
+			known_tabs.append(t[0])
+			if not first:
+				show_toast("New on your ship: %s" % t[1])
+				Sfx.play("coin", 0.8)
+	if not Game.tab_unlocked(s.tab):
+		s.tab = "dredge"
+
 	for c in tab_bar.get_children():
 		tab_bar.remove_child(c)
 		c.queue_free()
-	for t in TABS:
+	for t in open_tabs:
 		var b := _button(t[1], Game.set_tab.bind(t[0]))
 		if s.tab == t[0]:
 			b.add_theme_stylebox_override("normal", _box(C_ACCENT, C_ACCENT, 8, 1, 8))
@@ -249,6 +284,7 @@ func refresh() -> void:
 		content.remove_child(c)
 		c.queue_free()
 	progress = null
+	bin_nodes = {}
 	match s.tab:
 		"dredge":
 			_page_dredge()
@@ -271,11 +307,11 @@ func refresh() -> void:
 
 func _page_dredge() -> void:
 	var s: Dictionary = Game.s
-	var v := _card("%s  ·  basket holds %d" % [Data.DEPTHS[s.depth].n, Game.basket()])
+	var v := _card("%s  ·  basket holds %d/%d" % [Data.DEPTHS[s.depth].n, Game.basket(), Data.MAX_BASKET])
 	var busy: bool = Game.dredging()
 	var has_catch: bool = not s.tray.is_empty()
 	var txt: String = "Dredging…" if busy else ("Sort your catch first" if has_catch else "Drop the dredge")
-	var b := _button(txt, Game.start_dredge, busy or has_catch)
+	var b := _button(txt, _start_dredge, busy or has_catch)
 	b.add_theme_font_size_override("font_size", 22)
 	b.custom_minimum_size = Vector2(300, 56)
 	b.size_flags_horizontal = SIZE_SHRINK_BEGIN
@@ -285,80 +321,182 @@ func _page_dredge() -> void:
 	progress.custom_minimum_size.y = 14
 	progress.value = Game.dredge_progress() * 100.0
 	v.add_child(progress)
+	progress_label = _label("", 14, C_DIM)
+	v.add_child(progress_label)
 
-	if not has_catch:
-		_card().add_child(
+	if has_catch:
+		var c := _card("Catch — clear it all to dredge again")
+		var flow := HFlowContainer.new()
+		flow.add_theme_constant_override("h_separation", 8)
+		flow.add_theme_constant_override("v_separation", 8)
+		c.add_child(flow)
+		var i := 0
+		for it in s.tray:
+			var card := _item_card(it)
+			flow.add_child(card)
+			if pending_pop:
+				card.modulate.a = 0.0
+				var tw := card.create_tween()
+				tw.tween_interval(0.035 * i)
+				tw.tween_property(card, "modulate:a", 1.0, 0.25)
+			i += 1
+		pending_pop = false
+		c.add_child(
 			_para(
-				"The tray is empty. Head to Storage or Stations to sell or process what you've sorted, or drop the dredge again.",
+				"Drag each piece of junk into its bin. There's no timer: getting it right in a row raises your payout (now ×%.2f)."
+				% Game.streak_mult(),
 				C_DIM
 			)
 		)
-		return
+	else:
+		progress_label.text = "The tray is empty. Drop the dredge, or sell what you've sorted in Storage."
 
-	var c := _card("Catch — clear it all to dredge again")
-	var flow := HFlowContainer.new()
-	flow.add_theme_constant_override("h_separation", 8)
-	flow.add_theme_constant_override("v_separation", 8)
-	c.add_child(flow)
-	for it in s.tray:
-		flow.add_child(_item_card(it))
-	c.add_child(
-		_para(
-			"Pick up a piece of junk, then choose its bin. Correct sorts in a row raise your payout (now ×%.2f)."
-			% Game.streak_mult(),
-			C_DIM
-		)
-	)
-	var grid := _grid(c, 3)
+	var bc := _card("Sorting bins")
+	var grid := _grid(bc, 3)
 	for k in Data.BIN_KEYS:
-		var bin: Dictionary = Data.BINS[k]
-		var sorted: Dictionary = s.goods.get("bin_" + k, {"n": 0})
-		var bt := _button("%s %s  (%d sorted)" % [bin.e, bin.n, sorted.n], Game.sort_into.bind(k))
-		bt.size_flags_horizontal = SIZE_EXPAND_FILL
-		bt.custom_minimum_size.y = 52
-		grid.add_child(bt)
+		grid.add_child(_bin(k))
+	var rules := _active_rules()
+	if not rules.is_empty():
+		bc.add_child(_para("Your stations have changed where some things go:", C_ACCENT, 14))
+		for line in rules:
+			bc.add_child(_para(line, C_DIM, 14))
+	if not pending_impact.is_empty() and bin_nodes.has(pending_impact.bin):
+		# Wait a frame so the freshly built bin has its size before it squashes.
+		get_tree().process_frame.connect(
+			_impact.bind(bin_nodes[pending_impact.bin], pending_impact), CONNECT_ONE_SHOT
+		)
+	pending_impact = {}
+
+
+func _bin(k: String) -> Control:
+	var info: Dictionary = Data.BINS[k]
+	var sorted: Dictionary = Game.s.goods.get("bin_" + k, {"n": 0})
+	# A plain Control slot, so the bin inside can squash and shake without its container undoing it.
+	var slot := Control.new()
+	slot.custom_minimum_size = Vector2(0, 92)
+	slot.size_flags_horizontal = SIZE_EXPAND_FILL
+	var bin := BinDrop.new()
+	bin.key = k
+	bin.set_anchors_preset(PRESET_FULL_RECT)
+	bin.add_theme_stylebox_override("panel", _box(C_HEADER, C_LINE, 12, 2, 8))
+	slot.add_child(bin)
+	var v := VBoxContainer.new()
+	v.mouse_filter = MOUSE_FILTER_IGNORE
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	bin.add_child(v)
+	for l in [_label(info.e, 30), _label(info.n), _label("%d sorted" % sorted.n, 13, C_DIM)]:
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		v.add_child(l)
+	bin_nodes[k] = bin
+	return slot
+
+
+func _active_rules() -> Array:
+	var out := []
+	for r in Data.SORT_RULES:
+		if Game.has_station(r.st):
+			out.append("• %s → %s  (%s)" % [r.item, Data.BINS[r.bin].n, Data.STATIONS[r.st].n])
+	return out
+
+
+func _start_dredge() -> void:
+	Sfx.play("crank")
+	Game.start_dredge()
+
+
+func _on_hauled() -> void:
+	Sfx.play("splash")
+	pending_pop = true
+
+
+func _on_sorted(bin: String, correct: bool, weight: int, amount: float) -> void:
+	# Heavier things land lower and louder.
+	Sfx.play("drop_" + bin, 1.25 - 0.1 * weight, -12.0 + 2.5 * weight)
+	if not correct:
+		Sfx.play("wrong", 1.0, -8.0)
+	pending_impact = {"bin": bin, "correct": correct, "w": weight, "amount": amount}
+
+
+## Squash the bin, shake the screen for heavy items, and float the payout up.
+func _impact(bin: Control, info: Dictionary) -> void:
+	if not is_instance_valid(bin):
+		return
+	var w: int = info.w
+	bin.pivot_offset = Vector2(bin.size.x * 0.5, bin.size.y)
+	var tw := bin.create_tween()
+	tw.tween_property(bin, "scale", Vector2(1.0 + 0.03 * w, 1.0 - 0.045 * w), 0.05)
+	tw.tween_property(bin, "scale", Vector2.ONE, 0.4 + 0.06 * w).set_trans(
+		Tween.TRANS_ELASTIC
+	).set_ease(Tween.EASE_OUT)
+	if w >= 3:
+		var amp := 2.0 * (w - 2)
+		var sh := root_box.create_tween()
+		for n in 4:
+			var dir := 1.0 if n % 2 == 0 else -1.0
+			sh.tween_property(root_box, "position", Vector2(dir * amp, amp * 0.5), 0.03)
+			amp *= 0.6
+		sh.tween_property(root_box, "position", Vector2.ZERO, 0.03)
+	var correct: bool = info.correct
+	var pop := _label(
+		("+%d" % roundi(info.amount)) if correct else "wrong bin", 20, C_GOOD if correct else C_BAD
+	)
+	pop.mouse_filter = MOUSE_FILTER_IGNORE
+	add_child(pop)
+	pop.position = bin.global_position - global_position + Vector2(bin.size.x * 0.5 - 20, 4)
+	var pt := pop.create_tween()
+	pt.tween_property(pop, "position:y", pop.position.y - 44, 0.9).set_ease(Tween.EASE_OUT)
+	pt.parallel().tween_property(pop, "modulate:a", 0.0, 0.9).set_delay(0.3)
+	pt.tween_callback(pop.queue_free)
 
 
 func _item_card(it: Dictionary) -> Control:
 	var uid: int = it.uid
 	var selected: bool = Game.s.sel == uid
-	var p := PanelContainer.new()
+	var p: PanelContainer
+	if it.kind == "junk":
+		var dc := DragCard.new()
+		dc.uid = uid
+		dc.emoji = it.e
+		dc.weight = int(it.get("w", 2))
+		p = dc
+	else:
+		p = PanelContainer.new()
 	p.add_theme_stylebox_override(
 		"panel", _box(C_PANEL2, C_ACCENT if selected else C_LINE, 10, 2, 10)
 	)
-	p.custom_minimum_size = Vector2(160, 0)
+	p.custom_minimum_size = Vector2(150, 0)
 	var v := VBoxContainer.new()
+	v.mouse_filter = MOUSE_FILTER_IGNORE
 	p.add_child(v)
 
 	var sub := ""
 	var sub_color := C_DIM
-	var actions := []  # [text, Callable]
+	var actions := []  # [text, Callable, sound]
 	match it.kind:
 		"junk":
-			sub = "needs sorting"
-			actions.append(["Holding" if selected else "Pick up", Game.select.bind(uid)])
+			sub = "in hand — pick a bin" if selected else "drag to a bin"
 		"fish":
-			actions.append(["Store", Game.fish_store.bind(uid)])
-			actions.append(["Sell now", Game.fish_sell.bind(uid)])
+			actions.append(["Store", Game.fish_store.bind(uid), "pickup"])
+			actions.append(["Sell now", Game.fish_sell.bind(uid), "coin"])
 		"curio":
 			if not it.done:
 				sub = "dirty (%d/%d)" % [it.clicks, Game.clean_clicks()]
-				actions.append(["Clean", Game.clean.bind(uid)])
+				actions.append(["Clean", Game.clean.bind(uid), "scrub"])
 			else:
 				sub = "%s · %dc" % [it.rar, roundi(it.value * Game.g_mult())]
 				sub_color = RAR_COLORS[it.rar]
-				actions.append(["To Log", Game.curio_keep.bind(uid)])
-				actions.append(["Sell", Game.curio_sell.bind(uid)])
+				actions.append(["To Log", Game.curio_keep.bind(uid), "pickup"])
+				actions.append(["Sell", Game.curio_sell.bind(uid), "coin"])
 		"crate":
-			actions.append(["Open", Game.open_crate.bind(uid)])
+			actions.append(["Open", Game.open_crate.bind(uid), "drop_wood"])
 		"bottle":
-			actions.append(["Open", Game.open_bottle.bind(uid)])
+			actions.append(["Open", Game.open_bottle.bind(uid), "pickup"])
 		"empty":
-			actions.append(["Keep", Game.empty_keep.bind(uid)])
-			actions.append(["Recycle", Game.empty_sell.bind(uid)])
+			actions.append(["Keep", Game.empty_keep.bind(uid), "pickup"])
+			actions.append(["Recycle", Game.empty_sell.bind(uid), "coin"])
 		"animal":
 			sub = "tangled in the net"
-			actions.append(["Set free", Game.free_animal.bind(uid)])
+			actions.append(["Set free", Game.free_animal.bind(uid), "splash"])
 
 	for l in [_label(it.e, 38), _label(it.name), _label(sub, 14, sub_color)]:
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -366,7 +504,7 @@ func _item_card(it: Dictionary) -> Control:
 	var r := _row(v)
 	r.alignment = BoxContainer.ALIGNMENT_CENTER
 	for a in actions:
-		r.add_child(_button(a[0], a[1]))
+		r.add_child(_button(a[0], a[1], false, a[2]))
 	return p
 
 
@@ -408,14 +546,6 @@ func _page_craft() -> void:
 	for i in Data.RECIPES.size():
 		var r: Dictionary = Data.RECIPES[i]
 		if not Game.has_station(r.st):
-			var st: Dictionary = Data.STATIONS[r.st]
-			var lv := _card("%s %s  (locked)" % [st.e, st.n])
-			lv.add_child(_para(st.d))
-			var b := _button(
-				"Build — %dc" % st.cost, Game.build_station.bind(r.st), s.coins < st.cost
-			)
-			b.size_flags_horizontal = SIZE_SHRINK_BEGIN
-			lv.add_child(b)
 			continue
 		var v := _card("%s %s" % [r.e, r.n])
 		v.add_child(_para(r.d))
@@ -426,9 +556,31 @@ func _page_craft() -> void:
 		var have: bool = s.goods.has(inp)
 		var amount: String = "%d units" % s.goods[inp].n if have else "none"
 		v.add_child(_para("Input: %s — %s  ·  output value ×%.1f" % [inp_name, amount, r.f], C_DIM))
-		var pb := _button("Process all", Game.process_recipe.bind(i), not have)
+		var pb := _button("Process all", Game.process_recipe.bind(i), not have, "scrub")
 		pb.size_flags_horizontal = SIZE_SHRINK_BEGIN
 		v.add_child(pb)
+
+	if not Game.stations_open():
+		_card("🔧 Room for more").add_child(
+			_para(
+				"There's space on deck for more workstations once your basket holds %d items (now %d)."
+				% [Data.STATIONS_UNLOCK_BASKET, Game.basket()],
+				C_DIM
+			)
+		)
+		return
+	var k: String = Game.next_station()
+	if k == "":
+		return
+	var st: Dictionary = Data.STATIONS[k]
+	var lv := _card("%s %s  (not installed)" % [st.e, st.n])
+	lv.add_child(_para(st.d))
+	for r in Data.SORT_RULES:
+		if r.st == k:
+			lv.add_child(_para("Opens a new use: %s → %s" % [r.item, Data.BINS[r.bin].n], C_DIM, 14))
+	var b := _button("Install — %dc" % st.cost, Game.build_station.bind(k), s.coins < st.cost, "drop_metal")
+	b.size_flags_horizontal = SIZE_SHRINK_BEGIN
+	lv.add_child(b)
 
 
 func _page_desk() -> void:
@@ -513,19 +665,28 @@ func _desk_rules() -> void:
 func _page_work() -> void:
 	var s: Dictionary = Game.s
 	for k in Data.UP_KEYS:
+		if not Game.up_visible(k):
+			continue
 		var u: Dictionary = Data.UPS[k]
 		var cost: int = Game.up_cost(k)
 		var maxed: bool = s.up[k] >= u.max
-		var v := _card("%s   lv %d/%d" % [u.n, s.up[k], u.max])
+		var title: String = "%s   lv %d/%d" % [u.n, s.up[k], u.max]
+		if k == "basket":
+			title = "%s   holds %d/%d" % [u.n, Game.basket(), Data.MAX_BASKET]
+		var v := _card(title)
 		v.add_child(_para(u.d, C_DIM))
 		var b := _button(
 			"Maxed" if maxed else "Upgrade — %dc" % cost,
 			Game.upgrade.bind(k),
-			maxed or s.coins < cost
+			maxed or s.coins < cost,
+			"drop_metal"
 		)
 		b.size_flags_horizontal = SIZE_SHRINK_BEGIN
 		v.add_child(b)
 
+	# Prestige only shows up once every station is installed.
+	if Game.next_station() != "":
+		return
 	var goal: int = Game.prestige_goal()
 	var v := _card("🌅 Retire the vessel (prestige %d)" % s.prestige)
 	v.add_child(

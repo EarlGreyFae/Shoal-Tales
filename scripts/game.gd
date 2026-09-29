@@ -4,6 +4,10 @@ extends Node
 signal changed
 signal toast(msg: String)
 signal letter_opened(letter: Dictionary)
+## A junk item landed in a bin. The UI uses this for the impact, sound and payout pop.
+signal sorted(bin: String, correct: bool, weight: int, amount: float)
+## A fresh catch just came up.
+signal hauled
 
 const SAVE_PATH := "user://shoal_tales_save.json"
 const MAX_PENDING_LETTERS := 3
@@ -24,8 +28,8 @@ func _process(_delta: float) -> void:
 		s.hauls += 1
 		s.tray = _haul()
 		s.sel = -1
-		toast.emit("The basket lifts…")
 		_commit()
+		hauled.emit()
 
 
 func _notification(what: int) -> void:
@@ -144,7 +148,7 @@ func dredge_secs() -> float:
 
 
 func basket() -> int:
-	return 3 + int(s.up.basket) + (1 if has_magic("lantern") else 0)
+	return mini(Data.MAX_BASKET, 3 + int(s.up.basket) + (1 if has_magic("lantern") else 0))
 
 
 func clean_clicks() -> int:
@@ -152,11 +156,53 @@ func clean_clicks() -> int:
 
 
 func up_cost(k: String) -> int:
-	return roundi(Data.UPS[k].base * pow(Data.UPS[k].g, s.up[k]))
+	var u: Dictionary = Data.UPS[k]
+	var lv: int = s.up[k]
+	if u.has("sq"):
+		return roundi(u.base + u.sq * lv * lv)
+	return roundi(u.base * pow(u.g, lv))
+
+
+func up_visible(k: String) -> bool:
+	return basket() >= Data.UP_REVEAL[k] or s.up[k] > 0
+
+
+func stations_open() -> bool:
+	return basket() >= Data.STATIONS_UNLOCK_BASKET
+
+
+## The next station the player can install, or "" once all are built.
+func next_station() -> String:
+	for k in Data.STATION_ORDER:
+		if not s.st.has(k):
+			return k
+	return ""
+
+
+func tab_unlocked(t: String) -> bool:
+	match t:
+		"work":
+			return s.life > 0.0 or s.up.basket > 0
+		"desk":
+			return not s.seen.is_empty() or not s.log.is_empty() or s.empties > 0
+		"map":
+			return basket() >= 12 or s.depth > 0
+		"guild":
+			return false  # needs the online server
+	return true
+
+
+## The bin an item belongs in right now, given the stations on the ship.
+func correct_bin(it: Dictionary) -> String:
+	var bin: String = it.bin
+	for r in Data.SORT_RULES:
+		if r.item == it.name and s.st.has(r.st):
+			bin = r.bin
+	return bin
 
 
 func prestige_goal() -> int:
-	return roundi(6000.0 * pow(2.2, s.prestige))
+	return roundi(1000000.0 * pow(2.2, s.prestige))
 
 
 func title() -> String:
@@ -220,7 +266,7 @@ func _new_item(kind: String) -> Dictionary:
 		"junk":
 			var j: Array = Data.JUNK.pick_random()
 			var base: float = Data.BINS[j[2]].p * randf_range(1.0, 1.5)
-			it.merge({"name": j[0], "e": j[1], "bin": j[2], "base": base})
+			it.merge({"name": j[0], "e": j[1], "bin": j[2], "w": j[3], "base": base})
 		"fish":
 			var f: Array = Data.FISH.pick_random()
 			it.merge({"name": f[0], "e": f[1], "base": f[2] * randf_range(0.8, 1.4)})
@@ -312,26 +358,35 @@ func select(uid: int) -> void:
 	_commit()
 
 
+## Click-then-click fallback for the drag-and-drop sort.
 func sort_into(bin: String) -> void:
-	var it := _item(s.sel)
-	if it.is_empty() or it.kind != "junk":
+	if _item(s.sel).is_empty():
 		toast.emit("Pick up a piece of junk first.")
 		return
-	if it.bin == bin:
-		_add("bin_" + bin, 1, it.base * streak_mult() * g_mult())
+	sort_item(s.sel, bin)
+
+
+## No timer: accuracy is what pays. Each correct sort in a row raises the streak bonus.
+func sort_item(uid: int, bin: String) -> void:
+	var it := _item(uid)
+	if it.is_empty() or it.kind != "junk":
+		return
+	var right := correct_bin(it)
+	var amount: float
+	if bin == right:
+		amount = it.base * streak_mult() * g_mult()
+		if right != it.bin:
+			amount *= Data.STATION_RULE_BONUS
 		s.streak += 1
 		s.best = maxi(s.best, s.streak)
 	else:
-		_add("bin_" + bin, 1, it.base * 0.4 * g_mult())
+		amount = it.base * 0.4 * g_mult()
 		s.streak = 0
-		toast.emit(
-			"Wrong bin! %s belongs in %s. Streak lost." % [it.name, Data.BINS[it.bin].n]
-		)
-		if it.bin == "hazardous":
-			s.coins = maxf(0.0, s.coins - 15.0)
-			toast.emit("Hazmat fine: −15")
+		toast.emit("%s belongs in %s. Streak reset." % [it.name, Data.BINS[right].n])
+	_add("bin_" + bin, 1, amount)
 	_drop(it)
 	_commit()
+	sorted.emit(bin, bin == right, int(it.get("w", 2)), amount)
 
 
 func clean(uid: int) -> void:
@@ -542,7 +597,10 @@ func build_station(k: String) -> void:
 		return
 	s.coins -= st.cost
 	s.st[k] = true
-	toast.emit("Built the %s" % st.n)
+	toast.emit("Installed the %s" % st.n)
+	for r in Data.SORT_RULES:
+		if r.st == k:
+			toast.emit("New sorting rule: %s now goes in %s." % [r.item, Data.BINS[r.bin].n])
 	_commit()
 
 

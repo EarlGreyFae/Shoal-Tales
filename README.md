@@ -19,6 +19,9 @@ Saves go to Godot's user folder (`%APPDATA%\Godot\app_userdata\Shoal Tales` on W
 | `scripts/data.gd` | All game content: junk, fish, curios, magic curios, depths, upgrades, stations, recipes, letters. |
 | `scripts/game.gd` | Rules, state and saving. Every player action is a method here. |
 | `scripts/main.gd` | The UI: tabs, item cards, bins, letter reader and writer, toasts. |
+| `scripts/ui/` | Drag-and-drop: the draggable tray card, the item under the cursor, the bins. |
+| `scripts/sfx.gd` | Plays sounds from `assets/sfx/`. |
+| `assets/sfx/` | Placeholder sounds I synthesized. Replace any of them with a real sound of the same name (`drop_metal.wav`, `pickup.wav`, …). |
 
 ## What's in
 
@@ -26,7 +29,8 @@ Dredge timer, sorting into 6 bins with a streak multiplier, curio cleaning and r
 
 ## Not yet
 
-- **Art and sound.** Emoji stand in for sprites; how they look depends on the player's system fonts.
+- **Art.** Emoji stand in for sprites; how they look depends on the player's system fonts.
+- **Real sounds.** The ones in `assets/sfx/` are synthesized stand-ins.
 - **Online features.** Guilds, parties, guild chat and shared letters need a server. Letters currently come from a local stand-in pool.
 - **Your Lore Letters.** The five in `scripts/data.gd` (`LETTERS`) are placeholders.
 - **Steam.** Export presets and the GodotSteam plugin (achievements, cloud saves, friends) come once there's a Steamworks app ID.

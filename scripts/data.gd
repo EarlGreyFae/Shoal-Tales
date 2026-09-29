@@ -11,38 +11,55 @@ const BINS := {
 	"mixed": {"n": "Mixed", "e": "🗑️", "p": 1.0},
 }
 
-# [name, emoji, bin]
+# [name, emoji, default bin, weight 1 (earbuds) to 5 (couch)]
 const JUNK := [
-	["Grocery bag", "🛍️", "plastic"],
-	["Water bottle", "🥤", "plastic"],
-	["Flip-flop", "🩴", "plastic"],
-	["Beach bucket", "🪣", "plastic"],
-	["Pool noodle", "🌭", "plastic"],
-	["Six-pack rings", "⭕", "plastic"],
-	["Soda can", "🥫", "metal"],
-	["Bike wheel", "🛞", "metal"],
-	["Shopping cart", "🛒", "metal"],
-	["Rusty wrench", "🔧", "metal"],
-	["Car hubcap", "⚙️", "metal"],
-	["Boat anchor", "⚓", "metal"],
-	["Driftwood", "🪵", "wood"],
-	["Patio chair", "🪑", "wood"],
-	["Pallet plank", "📏", "wood"],
-	["Soggy couch", "🛋️", "wood"],
-	["TV remote", "📱", "electronics"],
-	["Bluetooth speaker", "🔊", "electronics"],
-	["Old laptop", "💻", "electronics"],
-	["Game controller", "🎮", "electronics"],
-	["Earbuds", "🎧", "electronics"],
-	["Flip phone", "📞", "electronics"],
-	["Car battery", "🔋", "hazardous"],
-	["Paint can", "🎨", "hazardous"],
-	["Motor oil jug", "🛢️", "hazardous"],
-	["Aerosol can", "🧯", "hazardous"],
-	["Tangled fishing line", "🧶", "mixed"],
-	["Hoodie", "👕", "mixed"],
-	["Sneaker", "👟", "mixed"],
-	["Backpack", "🎒", "mixed"],
+	["Grocery bag", "🛍️", "plastic", 1],
+	["Water bottle", "🥤", "plastic", 1],
+	["Flip-flop", "🩴", "plastic", 1],
+	["Beach bucket", "🪣", "plastic", 2],
+	["Pool noodle", "🌭", "plastic", 1],
+	["Six-pack rings", "⭕", "plastic", 1],
+	["Soda can", "🥫", "metal", 1],
+	["Bike wheel", "🛞", "metal", 3],
+	["Shopping cart", "🛒", "metal", 5],
+	["Rusty wrench", "🔧", "metal", 2],
+	["Car hubcap", "⚙️", "metal", 3],
+	["Boat anchor", "⚓", "metal", 5],
+	["Driftwood", "🪵", "wood", 2],
+	["Patio chair", "🪑", "wood", 3],
+	["Pallet plank", "📏", "wood", 3],
+	["Soggy couch", "🛋️", "wood", 5],
+	["TV remote", "📱", "electronics", 1],
+	["Bluetooth speaker", "🔊", "electronics", 2],
+	["Old laptop", "💻", "electronics", 3],
+	["Game controller", "🎮", "electronics", 1],
+	["Earbuds", "🎧", "electronics", 1],
+	["Flip phone", "📞", "electronics", 1],
+	["Car battery", "🔋", "hazardous", 4],
+	["Paint can", "🎨", "hazardous", 2],
+	["Motor oil jug", "🛢️", "hazardous", 3],
+	["Aerosol can", "🧯", "hazardous", 1],
+	["Tangled fishing line", "🧶", "mixed", 1],
+	["Hoodie", "👕", "mixed", 1],
+	["Sneaker", "👟", "mixed", 1],
+	["Backpack", "🎒", "mixed", 2],
+	["Skateboard", "🛹", "mixed", 2],
+	["Broken guitar", "🎸", "mixed", 3],
+	["Umbrella", "☂️", "mixed", 1],
+	["Toaster", "🍞", "electronics", 3],
+]
+
+# Owning a station opens up new uses for some items, which changes their correct bin.
+# Later entries win. Sorting by a station rule pays STATION_RULE_BONUS extra.
+const STATION_RULE_BONUS := 1.5
+const SORT_RULES := [
+	{"st": "carpentry", "item": "Skateboard", "bin": "wood"},
+	{"st": "carpentry", "item": "Broken guitar", "bin": "wood"},
+	{"st": "crucible", "item": "Toaster", "bin": "metal"},
+	{"st": "crucible", "item": "Umbrella", "bin": "metal"},
+	{"st": "crucible", "item": "Aerosol can", "bin": "metal"},
+	{"st": "recycler", "item": "Sneaker", "bin": "plastic"},
+	{"st": "recycler", "item": "Tangled fishing line", "bin": "plastic"},
 ]
 
 # [name, emoji, base value]
@@ -103,21 +120,28 @@ const DEPTHS := [
 	},
 ]
 
-const UP_KEYS := ["speed", "basket", "clean", "luck"]
+const MAX_BASKET := 32
+const UP_KEYS := ["basket", "speed", "clean", "luck"]
+# Basket size at which each extra upgrade shows up on the Work Table.
+const UP_REVEAL := {"basket": 0, "speed": 6, "clean": 10, "luck": 16}
 const UPS := {
 	"speed": {"n": "Faster winch", "d": "Dredge time −12%", "base": 60, "g": 1.9, "max": 8},
-	"basket": {"n": "Bigger basket", "d": "+1 item per haul", "base": 80, "g": 2.0, "max": 6},
+	# Basket cost is base + sq * level², tuned so reaching 32 slots takes about a day of play.
+	"basket": {"n": "Bigger basket", "d": "+1 item per haul", "base": 20, "sq": 70, "max": 29},
 	"clean": {"n": "Soft brush", "d": "Fewer clicks to clean", "base": 100, "g": 2.5, "max": 3},
 	"luck": {"n": "Lucky charm", "d": "Better rarity & magic odds", "base": 120, "g": 2.2, "max": 5},
 }
 
+# Stations beyond the Cutting Board open up once the basket is full size, one at a time.
+const STATIONS_UNLOCK_BASKET := 32
+const STATION_ORDER := ["oven", "carpentry", "crucible", "recycler"]
 const STATIONS := {
-	"oven": {"n": "Oven", "e": "🔥", "cost": 150, "d": "Cooks dressed fish into meals."},
-	"crucible": {"n": "Crucible", "e": "🌋", "cost": 300, "d": "Melts the metal bin into ingots."},
+	"oven": {"n": "Oven", "e": "🔥", "cost": 30000, "d": "Cooks dressed fish into meals."},
+	"crucible": {"n": "Crucible", "e": "🌋", "cost": 100000, "d": "Melts the metal bin into ingots."},
 	"carpentry":
-	{"n": "Carpentry Bench", "e": "🪚", "cost": 250, "d": "Turns the wood bin into knick-knacks."},
+	{"n": "Carpentry Bench", "e": "🪚", "cost": 60000, "d": "Turns the wood bin into knick-knacks."},
 	"recycler":
-	{"n": "Recycling Machine", "e": "♻️", "cost": 500, "d": "Breaks the mixed bin into base materials."},
+	{"n": "Recycling Machine", "e": "♻️", "cost": 160000, "d": "Breaks the mixed bin into base materials."},
 }
 
 # Processed goods: [name, emoji]
