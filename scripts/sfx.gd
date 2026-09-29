@@ -4,6 +4,8 @@ extends Node
 
 const DIR := "res://assets/sfx/"
 const VOICES := 8
+## Applied to every sound. -10 dB is roughly half as loud to the ear.
+const MASTER_DB := -10.0
 
 var _streams := {}
 var _players: Array[AudioStreamPlayer] = []
@@ -28,5 +30,5 @@ func play(sound: String, pitch := 1.0, volume_db := 0.0) -> void:
 	_next = (_next + 1) % VOICES
 	p.stream = stream
 	p.pitch_scale = pitch * randf_range(0.96, 1.04)
-	p.volume_db = volume_db
+	p.volume_db = volume_db + MASTER_DB
 	p.play()

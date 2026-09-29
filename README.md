@@ -25,7 +25,7 @@ Saves go to Godot's user folder (`%APPDATA%\Godot\app_userdata\Shoal Tales` on W
 
 ## What's in
 
-Dredge timer, sorting into 6 bins with a streak multiplier, curio cleaning and rarity, Collector's Log, magic curios (permanent buffs, full-set bonus), crates, bottles (Lore Letters, community letters with voting, empty bottles), animals to set free, stations (Cutting Board, Oven, Crucible, Carpentry Bench, Recycling Machine), storage and selling, Work Table upgrades, Map depths, prestige with titles, letter-writing warning and rules, max 3 letters awaiting review.
+Dredge timer, drag-and-drop sorting into 6 bins with a streak multiplier, Inspect hints, a cooler for fish and a click-to-dress Cutting Board, hidden requirements that unlock stations in order, a crow's invitation ashore, curio cleaning and rarity, Collector's Log, magic curios (permanent buffs, full-set bonus), crates, bottles (Lore Letters, community letters with voting, empty bottles), animals to set free, stations (Cutting Board, Oven, Crucible, Carpentry Bench, Recycling Machine), storage and selling, Work Table upgrades, Map depths, prestige with titles, letter-writing warning and rules, max 3 letters awaiting review.
 
 ## Not yet
 

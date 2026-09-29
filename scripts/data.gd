@@ -49,28 +49,67 @@ const JUNK := [
 	["Toaster", "🍞", "electronics", 3],
 ]
 
+# What Inspect says about each piece of junk. Each line hints at its default bin.
+const DESCS := {
+	"Grocery bag": "Thin, crinkly, and weighs nothing. It's already trying to float away.",
+	"Water bottle": "Clear and squeezable, stamped with a little triangle of arrows.",
+	"Flip-flop": "One rubbery sandal, bendy and bright. Its partner is out there somewhere.",
+	"Beach bucket": "A molded pail with a cracked handle. Someone's sandcastle never got finished.",
+	"Pool noodle": "Squishy foam in faded neon. Bends in half without complaint.",
+	"Six-pack rings": "Stretchy see-through loops that once held drinks. Gulls hate these.",
+	"Soda can": "Crushed, cold, and light. It rings when you flick it.",
+	"Bike wheel": "Bent spokes on a rusted rim. It clanks against everything.",
+	"Shopping cart": "A heavy wire frame with one squeaky wheel. Rattles like a chain.",
+	"Rusty wrench": "Solid, cold, and orange with rust. A tool that's seen better days.",
+	"Car hubcap": "A dented steel disc. It rings like a gong when you knock on it.",
+	"Boat anchor": "Cast iron, very heavy, and still very good at its old job.",
+	"Driftwood": "Smooth, pale, and grainy. Smells like a campfire waiting to happen.",
+	"Patio chair": "Slatted boards held together with pegs. Splinters included.",
+	"Pallet plank": "Rough-cut lumber with a few nail holes.",
+	"Soggy couch": "Waterlogged cushions on a sturdy timber frame. The cushions are a lost cause.",
+	"TV remote": "Buttons, batteries, and a little infrared eye. Still tries to change the channel.",
+	"Bluetooth speaker": "Rubber-wrapped around a circuit board. It crackles when you shake it.",
+	"Old laptop": "A hinged screen, a keyboard, and a motherboard full of chips and wires.",
+	"Game controller": "Two thumbsticks and a circuit board. Someone lost their high score.",
+	"Earbuds": "Tiny, wired, and tangled. Still faintly playing something? No. Surely not.",
+	"Flip phone": "Snaps shut satisfyingly. Antenna, battery, circuit board.",
+	"Car battery": "Heavy, and it sloshes. There's acid inside. Handle with gloves.",
+	"Paint can": "Half full of something that shouldn't be in the ocean. The lid says FLAMMABLE.",
+	"Motor oil jug": "Slick, black, and leaking a rainbow sheen. Definitely toxic.",
+	"Aerosol can": "Pressurized, with a warning label: DO NOT PUNCTURE. Still has some pressure left.",
+	"Tangled fishing line": "A knot of nylon, hooks and seaweed. It's many things at once.",
+	"Hoodie": "A soaked cotton-and-polyester blend. No single material to it.",
+	"Sneaker": "Rubber sole, fabric upper, plastic eyelets and glue. A bit of everything.",
+	"Backpack": "Zippers, straps, nylon and buckles. A jumble of materials.",
+	"Skateboard": "Grip tape, metal trucks, urethane wheels. Too many parts to call it one thing.",
+	"Broken guitar": "Strings, tuning pegs, a pickup, a cracked body. A bit of everything.",
+	"Umbrella": "A nylon canopy, a plastic handle, and a folding frame. Hard to pin down.",
+	"Toaster": "A plug, heating coils and a little circuit inside a chrome shell.",
+}
+
 # Owning a station opens up new uses for some items, which changes their correct bin.
 # Later entries win. Sorting by a station rule pays STATION_RULE_BONUS extra.
+# "hint" is added to Inspect once the station is on board.
 const STATION_RULE_BONUS := 1.5
 const SORT_RULES := [
-	{"st": "carpentry", "item": "Skateboard", "bin": "wood"},
-	{"st": "carpentry", "item": "Broken guitar", "bin": "wood"},
-	{"st": "crucible", "item": "Toaster", "bin": "metal"},
-	{"st": "crucible", "item": "Umbrella", "bin": "metal"},
-	{"st": "crucible", "item": "Aerosol can", "bin": "metal"},
-	{"st": "recycler", "item": "Sneaker", "bin": "plastic"},
-	{"st": "recycler", "item": "Tangled fishing line", "bin": "plastic"},
+	{"st": "carpentry", "item": "Skateboard", "bin": "wood", "hint": "The deck is solid maple. Your Carpentry Bench could use that."},
+	{"st": "carpentry", "item": "Broken guitar", "bin": "wood", "hint": "That hollow body is good tonewood. Your Carpentry Bench could use it."},
+	{"st": "crucible", "item": "Toaster", "bin": "metal", "hint": "That chrome shell would melt down nicely in your Crucible."},
+	{"st": "crucible", "item": "Umbrella", "bin": "metal", "hint": "The folding frame is steel. Your Crucible could use it."},
+	{"st": "crucible", "item": "Aerosol can", "bin": "metal", "hint": "Once it's emptied, the can is thin steel. Your Crucible could use it."},
+	{"st": "recycler", "item": "Sneaker", "bin": "plastic", "hint": "The Recycling Machine can strip the rubber and plastic out of it."},
+	{"st": "recycler", "item": "Tangled fishing line", "bin": "plastic", "hint": "The Recycling Machine can reclaim the nylon line."},
 ]
 
-# [name, emoji, base value]
+# [name, emoji, base value, weight]
 const FISH := [
-	["Sardine", "🐟", 6.0],
-	["Snapper", "🐠", 10.0],
-	["Squid", "🦑", 14.0],
-	["Crab", "🦀", 16.0],
-	["Kelp", "🌿", 5.0],
-	["Octopus", "🐙", 24.0],
-	["Lobster", "🦞", 30.0],
+	["Sardine", "🐟", 6.0, 1],
+	["Snapper", "🐠", 10.0, 2],
+	["Squid", "🦑", 14.0, 2],
+	["Crab", "🦀", 16.0, 2],
+	["Kelp", "🌿", 5.0, 1],
+	["Octopus", "🐙", 24.0, 3],
+	["Lobster", "🦞", 30.0, 3],
 ]
 
 const CURIOS := [
@@ -135,18 +174,35 @@ const UPS := {
 # Stations beyond the Cutting Board open up once the basket is full size, one at a time.
 const STATIONS_UNLOCK_BASKET := 32
 const STATION_ORDER := ["oven", "carpentry", "crucible", "recycler"]
+# "needs" is a hidden requirement: how many of something you've handled since the last
+# station was installed. The player only sees "tease" until it's met.
 const STATIONS := {
-	"oven": {"n": "Oven", "e": "🔥", "cost": 30000, "d": "Cooks dressed fish into meals."},
-	"crucible": {"n": "Crucible", "e": "🌋", "cost": 100000, "d": "Melts the metal bin into ingots."},
-	"carpentry":
-	{"n": "Carpentry Bench", "e": "🪚", "cost": 60000, "d": "Turns the wood bin into knick-knacks."},
-	"recycler":
-	{"n": "Recycling Machine", "e": "♻️", "cost": 160000, "d": "Breaks the mixed bin into base materials."},
+	"oven": {
+		"n": "Oven", "e": "🔥", "cost": 30000, "d": "Cooks dressed fish into meals.",
+		"needs": {"stat": "dressed", "count": 40},
+		"tease": "You catch yourself wondering what all this fish would taste like cooked.",
+	},
+	"carpentry": {
+		"n": "Carpentry Bench", "e": "🪚", "cost": 60000,
+		"d": "Turns the wood bin into knick-knacks.",
+		"needs": {"stat": "wood", "count": 150},
+		"tease": "The wood bin is filling up. It seems a shame to just sell good lumber.",
+	},
+	"crucible": {
+		"n": "Crucible", "e": "🌋", "cost": 100000, "d": "Melts the metal bin into ingots.",
+		"needs": {"stat": "metal", "count": 200},
+		"tease": "All that scrap metal. If only you had a way to melt it down.",
+	},
+	"recycler": {
+		"n": "Recycling Machine", "e": "♻️", "cost": 160000,
+		"d": "Breaks the mixed bin into base materials.",
+		"needs": {"stat": "mixed", "count": 200},
+		"tease": "The mixed bin is the one nobody wants. There must be something useful in there.",
+	},
 }
 
 # Processed goods: [name, emoji]
 const GOODS := {
-	"fish_raw": ["Fish (raw)", "🐟"],
 	"fish_dressed": ["Dressed fish", "🍣"],
 	"meal": ["Meals", "🍲"],
 	"ingot": ["Ingots", "🧱"],
@@ -154,12 +210,11 @@ const GOODS := {
 	"material": ["Base materials", "📦"],
 }
 
-# st "cut" is the Cutting Board, which every player starts with.
+# Dressing a fish on the Cutting Board multiplies its value by this.
+const DRESS_MULT := 1.6
+
+# Stations that process a whole stock at once. (The Cutting Board is hands-on and separate.)
 const RECIPES := [
-	{
-		"st": "cut", "n": "Cutting Board", "e": "🔪", "inp": "fish_raw", "out": "fish_dressed",
-		"f": 1.6, "d": "Dress fish for a better price.",
-	},
 	{
 		"st": "oven", "n": "Oven", "e": "🔥", "inp": "fish_dressed", "out": "meal",
 		"f": 2.2, "d": "Cook dressed fish into meals.",
@@ -202,6 +257,14 @@ const LETTERS := [
 		"t": "You've been here before. Don't worry. It's always a little easier the second time.",
 	},
 ]
+
+# Story letters arrive at set moments, never in bottles.
+const STORY_LETTERS := {
+	"crow1": {
+		"id": "crow1", "dev": true, "crow": true, "from": "a crow",
+		"t": "A crow lands on the railing, drops a folded diner receipt at your feet, and stares at you until you pick it up. On the back, in pencil:\n\n\"Nice knife work. Come ashore sometime. The diner's open till six, and people here have been expecting you.\"\n\nWhen you look up, the crow is gone. You never heard it leave.",
+	},
+}
 
 # Stand-ins for player letters until there is a server to share them.
 const SEED_COMMUNITY := [

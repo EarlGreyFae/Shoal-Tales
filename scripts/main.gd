@@ -25,6 +25,7 @@ const TABS := [
 	["storage", "📦 Storage"],
 	["craft", "🔨 Stations"],
 	["desk", "🗒️ Desk"],
+	["shore", "🏘️ Shore"],
 	["work", "🛠️ Work Table"],
 	["map", "🗺️ Map"],
 	["guild", "🤝 Guild"],
@@ -56,6 +57,7 @@ var bin_nodes := {}
 var pending_impact := {}
 var pending_pop := false
 var shown_coins := 0.0
+var inspect_uid := -1
 var known_tabs := []
 var toasts: VBoxContainer
 var modal: Control
@@ -263,7 +265,7 @@ func refresh() -> void:
 		if not known_tabs.has(t[0]):
 			known_tabs.append(t[0])
 			if not first:
-				show_toast("New on your ship: %s" % t[1])
+				show_toast("New: %s" % t[1])
 				Sfx.play("coin", 0.8)
 	if not Game.tab_unlocked(s.tab):
 		s.tab = "dredge"
@@ -298,6 +300,8 @@ func refresh() -> void:
 			_page_work()
 		"map":
 			_page_map()
+		"shore":
+			_page_shore()
 		"guild":
 			_page_guild()
 
@@ -341,9 +345,13 @@ func _page_dredge() -> void:
 				tw.tween_property(card, "modulate:a", 1.0, 0.25)
 			i += 1
 		pending_pop = false
+		var note := _inspect_note()
+		if note != "":
+			var nv := _card("", c, C_PANEL2)
+			nv.add_child(_para(note, C_INK, 15))
 		c.add_child(
 			_para(
-				"Drag each piece of junk into its bin. There's no timer: getting it right in a row raises your payout (now ×%.2f)."
+				"Drag junk into its bin and fish into the cooler. 🔍 Inspect gives a hint. There's no timer: getting it right in a row raises your payout (now ×%.2f)."
 				% Game.streak_mult(),
 				C_DIM
 			)
@@ -352,9 +360,10 @@ func _page_dredge() -> void:
 		progress_label.text = "The tray is empty. Drop the dredge, or sell what you've sorted in Storage."
 
 	var bc := _card("Sorting bins")
-	var grid := _grid(bc, 3)
+	var grid := _grid(bc, Data.BIN_KEYS.size() + 1)
 	for k in Data.BIN_KEYS:
 		grid.add_child(_bin(k))
+	grid.add_child(_bin("cooler"))
 	var rules := _active_rules()
 	if not rules.is_empty():
 		bc.add_child(_para("Your stations have changed where some things go:", C_ACCENT, 14))
@@ -369,22 +378,25 @@ func _page_dredge() -> void:
 
 
 func _bin(k: String) -> Control:
-	var info: Dictionary = Data.BINS[k]
-	var sorted: Dictionary = Game.s.goods.get("bin_" + k, {"n": 0})
+	var cooler := k == "cooler"
+	var info: Dictionary = {"e": "🧊", "n": "Cooler"} if cooler else Data.BINS[k]
+	var count: int = Game.s.cooler.size() if cooler else Game.s.goods.get("bin_" + k, {"n": 0}).n
 	# A plain Control slot, so the bin inside can squash and shake without its container undoing it.
 	var slot := Control.new()
 	slot.custom_minimum_size = Vector2(0, 92)
 	slot.size_flags_horizontal = SIZE_EXPAND_FILL
 	var bin := BinDrop.new()
+	var fill := Color("10283a") if cooler else C_HEADER
 	bin.key = k
+	bin.accepts = "fish" if cooler else "junk"
 	bin.set_anchors_preset(PRESET_FULL_RECT)
-	bin.add_theme_stylebox_override("panel", _box(C_HEADER, C_LINE, 12, 2, 8))
+	bin.add_theme_stylebox_override("panel", _box(fill, C_LINE, 12, 2, 8))
 	slot.add_child(bin)
 	var v := VBoxContainer.new()
 	v.mouse_filter = MOUSE_FILTER_IGNORE
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
 	bin.add_child(v)
-	for l in [_label(info.e, 30), _label(info.n), _label("%d sorted" % sorted.n, 13, C_DIM)]:
+	for l in [_label(info.e, 30), _label(info.n), _label(("%d fish" if cooler else "%d sorted") % count, 13, C_DIM)]:
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		v.add_child(l)
 	bin_nodes[k] = bin
@@ -397,6 +409,20 @@ func _active_rules() -> Array:
 		if Game.has_station(r.st):
 			out.append("• %s → %s  (%s)" % [r.item, Data.BINS[r.bin].n, Data.STATIONS[r.st].n])
 	return out
+
+
+func _inspect(uid: int) -> void:
+	inspect_uid = uid
+	# Deferred: the Inspect button that called this gets freed by the redraw.
+	refresh.call_deferred()
+
+
+func _inspect_note() -> String:
+	for it in Game.s.tray:
+		if it.uid == inspect_uid:
+			return "🔍 %s: %s" % [it.name, Game.inspect_text(it)]
+	inspect_uid = -1
+	return ""
 
 
 func _start_dredge() -> void:
@@ -453,9 +479,10 @@ func _item_card(it: Dictionary) -> Control:
 	var uid: int = it.uid
 	var selected: bool = Game.s.sel == uid
 	var p: PanelContainer
-	if it.kind == "junk":
+	if it.kind == "junk" or it.kind == "fish":
 		var dc := DragCard.new()
 		dc.uid = uid
+		dc.kind = it.kind
 		dc.emoji = it.e
 		dc.weight = int(it.get("w", 2))
 		p = dc
@@ -475,9 +502,9 @@ func _item_card(it: Dictionary) -> Control:
 	match it.kind:
 		"junk":
 			sub = "in hand — pick a bin" if selected else "drag to a bin"
+			actions.append(["🔍 Inspect", _inspect.bind(uid), "pickup"])
 		"fish":
-			actions.append(["Store", Game.fish_store.bind(uid), "pickup"])
-			actions.append(["Sell now", Game.fish_sell.bind(uid), "coin"])
+			sub = "in hand — click the cooler" if selected else "drag to the cooler"
 		"curio":
 			if not it.done:
 				sub = "dirty (%d/%d)" % [it.clicks, Game.clean_clicks()]
@@ -518,7 +545,14 @@ func _goods_name(g: String) -> String:
 func _page_storage() -> void:
 	var s: Dictionary = Game.s
 	var v := _card("Ship storage")
-	if s.goods.is_empty():
+	if not s.cooler.is_empty():
+		var cr := _row(v)
+		var cl := _label("🧊 Cooler: raw fish ×%d" % s.cooler.size())
+		cl.size_flags_horizontal = SIZE_EXPAND_FILL
+		cr.add_child(cl)
+		cr.add_child(_label("%dc" % roundi(Game.cooler_value())))
+		cr.add_child(_button("Sell", Game.sell_cooler, false, "coin"))
+	if s.goods.is_empty() and s.cooler.is_empty():
 		v.add_child(_para("Nothing stored. Sort some junk first.", C_DIM))
 	else:
 		for g in s.goods:
@@ -528,9 +562,9 @@ func _page_storage() -> void:
 			name_l.size_flags_horizontal = SIZE_EXPAND_FILL
 			r.add_child(name_l)
 			r.add_child(_label("%dc" % roundi(o.v)))
-			r.add_child(_button("Sell", Game.sell.bind(g)))
+			r.add_child(_button("Sell", Game.sell.bind(g), false, "coin"))
 		v.add_child(HSeparator.new())
-		var b := _button("Sell everything", Game.sell_all)
+		var b := _button("Sell everything", Game.sell_all, false, "coin")
 		b.size_flags_horizontal = SIZE_SHRINK_BEGIN
 		v.add_child(b)
 	_card().add_child(
@@ -543,6 +577,23 @@ func _page_storage() -> void:
 
 func _page_craft() -> void:
 	var s: Dictionary = Game.s
+	var cb := _card("🔪 Cutting Board")
+	if s.cooler.is_empty():
+		cb.add_child(_para("The cooler is empty. Drag fish from your catch into the cooler first.", C_DIM))
+	else:
+		cb.add_child(
+			_para(
+				"Click each fish to dress it. Dressed fish are worth ×%.1f." % Data.DRESS_MULT, C_DIM
+			)
+		)
+		var flow := HFlowContainer.new()
+		flow.add_theme_constant_override("h_separation", 8)
+		flow.add_theme_constant_override("v_separation", 8)
+		cb.add_child(flow)
+		for f in s.cooler:
+			var fb := _button("%s %s" % [f.e, f.name], Game.dress_fish.bind(int(f.uid)), false, "chop")
+			fb.custom_minimum_size = Vector2(130, 56)
+			flow.add_child(fb)
 	for i in Data.RECIPES.size():
 		var r: Dictionary = Data.RECIPES[i]
 		if not Game.has_station(r.st):
@@ -573,6 +624,10 @@ func _page_craft() -> void:
 	if k == "":
 		return
 	var st: Dictionary = Data.STATIONS[k]
+	if not Game.station_ready(k):
+		# The requirement stays hidden; the player only gets a nudge.
+		_card("🔧 Room for more").add_child(_para(st.tease, C_DIM))
+		return
 	var lv := _card("%s %s  (not installed)" % [st.e, st.n])
 	lv.add_child(_para(st.d))
 	for r in Data.SORT_RULES:
@@ -606,13 +661,15 @@ func _desk_library() -> void:
 	var s: Dictionary = Game.s
 	var v := _card("Letter library (%d found)" % s.seen.size())
 	var shown := 0
-	for l in Data.LETTERS + Data.SEED_COMMUNITY + s.outbox:
+	for l in Data.STORY_LETTERS.values() + Data.LETTERS + Data.SEED_COMMUNITY + s.outbox:
 		var mine: bool = l.get("mine", false)
 		if not (mine or s.seen.has(l.id)):
 			continue
 		shown += 1
 		var dev: bool = l.get("dev", false)
 		var head: String = ("🖋 Lore Letter · " if dev else "✉️ ") + str(l.from)
+		if l.get("crow", false):
+			head = "🐦‍⬛ From " + str(l.from)
 		if mine:
 			head += "  (approved)" if l.approved else "  (awaiting review)"
 		var lv := _card(head, v, C_PANEL2)
@@ -716,6 +773,19 @@ func _page_map() -> void:
 		v.add_child(b)
 
 
+func _page_shore() -> void:
+	var v := _card("🏘️ The shore")
+	v.add_child(
+		_para(
+			"The town sits just past the breakwater: a diner, a hardware store, a post office, and a lighthouse nobody mentions. Someone left the dock light on for you."
+		)
+	)
+	v.add_child(_para("The town itself is being built next.", C_DIM))
+	var b := _button("Re-read the crow's letter", show_letter.bind(Data.STORY_LETTERS.crow1))
+	b.size_flags_horizontal = SIZE_SHRINK_BEGIN
+	v.add_child(b)
+
+
 func _page_guild() -> void:
 	var v := _card("🤝 Guild Manifest")
 	v.add_child(
@@ -796,6 +866,9 @@ func show_letter(letter: Dictionary) -> void:
 	var v := _open_modal()
 	var dev: bool = letter.get("dev", false)
 	var head: String = ("🖋 Lore Letter from " if dev else "✉️ Letter from ") + str(letter.from)
+	if letter.get("crow", false):
+		head = "🐦‍⬛ A letter from " + str(letter.from)
+		Sfx.play("crow")
 	v.add_child(_label(head, 18, C_PAPER_INK))
 	v.add_child(_para(letter.t, C_PAPER_INK, 18))
 	var b := _button("Fold it away", _close_modal)

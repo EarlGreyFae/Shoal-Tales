@@ -60,6 +60,9 @@ func _fresh() -> Dictionary:
 		"sub": "library",
 		"uid": 1,
 		"hauls": 0,
+		"cooler": [],  # raw fish waiting for the Cutting Board
+		"dressed": 0,
+		"since": {},  # handled since the last station install; drives hidden station unlocks
 	}
 
 
@@ -74,6 +77,7 @@ func _persistent() -> Dictionary:
 		"tos": false,
 		"prestige": 0,
 		"empties": 0,
+		"story": {},  # story beats that have happened, e.g. "crow"
 	}
 
 
@@ -111,6 +115,19 @@ func _load() -> void:
 		it.uid = int(it.uid)
 		if it.has("clicks"):
 			it.clicks = int(it.clicks)
+	for it in s.cooler:
+		it.uid = int(it.uid)
+	s.dressed = int(s.dressed)
+	for k in s.since:
+		s.since[k] = int(s.since[k])
+	# Older saves kept raw fish as one lump; turn it into individual fish.
+	if s.goods.has("fish_raw"):
+		var lump: Dictionary = s.goods["fish_raw"]
+		for i in int(lump.n):
+			s.cooler.append(
+				{"uid": _next_uid(), "name": "Fish", "e": "🐟", "v": lump.v / maxf(1.0, lump.n)}
+			)
+		s.goods.erase("fish_raw")
 
 
 # ---------- derived values ----------
@@ -189,6 +206,8 @@ func tab_unlocked(t: String) -> bool:
 			return basket() >= 12 or s.depth > 0
 		"guild":
 			return false  # needs the online server
+		"shore":
+			return s.story.has("crow")
 	return true
 
 
@@ -269,7 +288,7 @@ func _new_item(kind: String) -> Dictionary:
 			it.merge({"name": j[0], "e": j[1], "bin": j[2], "w": j[3], "base": base})
 		"fish":
 			var f: Array = Data.FISH.pick_random()
-			it.merge({"name": f[0], "e": f[1], "base": f[2] * randf_range(0.8, 1.4)})
+			it.merge({"name": f[0], "e": f[1], "w": f[3], "base": f[2] * randf_range(0.8, 1.4)})
 		"curio":
 			var c: Array = Data.CURIOS.pick_random()
 			it.merge(
@@ -379,6 +398,7 @@ func sort_item(uid: int, bin: String) -> void:
 			amount *= Data.STATION_RULE_BONUS
 		s.streak += 1
 		s.best = maxi(s.best, s.streak)
+		_count(right)
 	else:
 		amount = it.base * 0.4 * g_mult()
 		s.streak = 0
@@ -450,22 +470,67 @@ func curio_keep(uid: int) -> void:
 	_commit()
 
 
-func fish_sell(uid: int) -> void:
+func _count(stat: String) -> void:
+	s.since[stat] = int(s.since.get(stat, 0)) + 1
+
+
+## What Inspect says: a hint at the default bin, plus any station that changes it.
+func inspect_text(it: Dictionary) -> String:
+	var text: String = Data.DESCS.get(it.name, "Hard to say what this was.")
+	for r in Data.SORT_RULES:
+		if r.item == it.name and s.st.has(r.st):
+			text += " " + r.hint
+	return text
+
+
+## Drag a fish into the cooler to keep it for the Cutting Board.
+func stash_fish(uid: int) -> void:
 	var it := _item(uid)
-	if it.is_empty():
+	if it.is_empty() or it.kind != "fish":
 		return
-	_earn(it.base * g_mult())
+	var v: float = it.base * g_mult()
+	s.cooler.append({"uid": it.uid, "name": it.name, "e": it.e, "v": v})
 	_drop(it)
+	_commit()
+	sorted.emit("cooler", true, int(it.get("w", 1)), v)
+
+
+func cooler_value() -> float:
+	var total := 0.0
+	for f in s.cooler:
+		total += f.v
+	return total
+
+
+func sell_cooler() -> void:
+	if s.cooler.is_empty():
+		return
+	var total := cooler_value()
+	_earn(total)
+	toast.emit("Sold %d raw fish for %d" % [s.cooler.size(), roundi(total)])
+	s.cooler = []
 	_commit()
 
 
-func fish_store(uid: int) -> void:
-	var it := _item(uid)
-	if it.is_empty():
+## The Cutting Board: one click dresses one fish.
+func dress_fish(uid: int) -> void:
+	var fish: Dictionary = {}
+	for f in s.cooler:
+		if f.uid == uid:
+			fish = f
+	if fish.is_empty():
 		return
-	_add("fish_raw", 1, it.base * g_mult())
-	_drop(it)
+	s.cooler.erase(fish)
+	_add("fish_dressed", 1, fish.v * Data.DRESS_MULT)
+	s.dressed += 1
+	_count("dressed")
 	_commit()
+	if not s.story.has("crow"):
+		s.story.crow = true
+		var letter: Dictionary = Data.STORY_LETTERS.crow1
+		s.seen.append(letter.id)
+		_commit()
+		letter_opened.emit(letter)
 
 
 func open_crate(uid: int) -> void:
@@ -576,8 +641,10 @@ func sell_all() -> void:
 	var total := 0.0
 	for g in s.goods:
 		total += s.goods[g].v
+	total += cooler_value()
 	_earn(total)
 	s.goods = {}
+	s.cooler = []
 	toast.emit("Sold everything for %d" % roundi(total))
 	_commit()
 
@@ -591,12 +658,21 @@ func upgrade(k: String) -> void:
 	_commit()
 
 
+## True once the station's hidden requirement is met. Stations still come strictly in order.
+func station_ready(k: String) -> bool:
+	if not stations_open() or next_station() != k:
+		return false
+	var needs: Dictionary = Data.STATIONS[k].needs
+	return int(s.since.get(needs.stat, 0)) >= int(needs.count)
+
+
 func build_station(k: String) -> void:
 	var st: Dictionary = Data.STATIONS[k]
-	if s.coins < st.cost or s.st.has(k):
+	if s.coins < st.cost or not station_ready(k):
 		return
 	s.coins -= st.cost
 	s.st[k] = true
+	s.since = {}
 	toast.emit("Installed the %s" % st.n)
 	for r in Data.SORT_RULES:
 		if r.st == k:

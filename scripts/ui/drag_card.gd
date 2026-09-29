@@ -1,9 +1,11 @@
 extends PanelContainer
-## A piece of junk on the tray. Drag it onto a bin, or click it and then click a bin.
+## A draggable catch on the tray: junk goes to a bin, fish to the cooler.
+## Clicking it and then clicking a bin works too.
 
 const Ghost := preload("res://scripts/ui/drag_ghost.gd")
 
 var uid := -1
+var kind := "junk"
 var emoji := ""
 var weight := 1
 
@@ -18,7 +20,7 @@ func _get_drag_data(_at_position: Vector2) -> Variant:
 	set_drag_preview(ghost)
 	modulate.a = 0.3
 	Sfx.play("pickup", 1.2 - 0.06 * weight, -4.0)
-	return {"uid": uid, "w": weight}
+	return {"uid": uid, "w": weight, "kind": kind}
 
 
 func _gui_input(event: InputEvent) -> void:
