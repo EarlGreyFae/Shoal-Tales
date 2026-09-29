@@ -649,10 +649,13 @@ func _start_writing() -> void:
 		return
 	_ask(
 		"Before writing: letters are shown to strangers and can be audited (the developer can see your handle). Never share personal information. Do you accept the Rules of the shore (Desk → Rules) and that risk?",
-		func():
-			Game.accept_tos()
-			_show_writer()
+		_accept_and_write
 	)
+
+
+func _accept_and_write() -> void:
+	Game.accept_tos()
+	_show_writer()
 
 
 func _show_writer() -> void:
@@ -671,9 +674,7 @@ func _show_writer() -> void:
 	te.custom_minimum_size.y = 150
 	v.add_child(te)
 	var counter := _label("0/%d" % Game.LETTER_MAX_CHARS, 14, C_PAPER_INK)
-	te.text_changed.connect(
-		func(): counter.text = "%d/%d" % [te.text.length(), Game.LETTER_MAX_CHARS]
-	)
+	te.text_changed.connect(_update_counter.bind(te, counter))
 	v.add_child(counter)
 	var sign_box := CheckBox.new()
 	sign_box.text = "Sign with my name instead of anonymous"
@@ -682,13 +683,15 @@ func _show_writer() -> void:
 	sign_box.add_theme_color_override("font_pressed_color", C_PAPER_INK)
 	v.add_child(sign_box)
 	var r := _row(v)
-	r.add_child(
-		_button(
-			"Send bottle",
-			func():
-				if Game.send_letter(te.text, sign_box.button_pressed):
-					_close_modal()
-		)
-	)
+	r.add_child(_button("Send bottle", _send_letter.bind(te, sign_box)))
 	r.add_child(_button("Cancel", _close_modal))
 	te.grab_focus()
+
+
+func _update_counter(te: TextEdit, counter: Label) -> void:
+	counter.text = "%d/%d" % [te.text.length(), Game.LETTER_MAX_CHARS]
+
+
+func _send_letter(te: TextEdit, sign_box: CheckBox) -> void:
+	if Game.send_letter(te.text, sign_box.button_pressed):
+		_close_modal()

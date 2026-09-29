@@ -444,9 +444,7 @@ func open_bottle(uid: int) -> void:
 		_commit()
 		return
 	var unseen: Array = Data.LETTERS.filter(func(l): return not s.seen.has(l.id))
-	var comm: Array = community_pool().filter(
-		func(l): return not s.seen.has(l.id) and score(l) > -3
-	)
+	var comm: Array = community_pool().filter(func(l): return _unread_ok(l))
 	var letter: Dictionary
 	if not unseen.is_empty() and (randf() < 0.5 or comm.is_empty()):
 		letter = unseen.pick_random()
@@ -459,6 +457,10 @@ func open_bottle(uid: int) -> void:
 	_drop(it)
 	_commit()
 	letter_opened.emit(letter)
+
+
+func _unread_ok(l: Dictionary) -> bool:
+	return not s.seen.has(l.id) and score(l) > -3
 
 
 func empty_keep(uid: int) -> void:
