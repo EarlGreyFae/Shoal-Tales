@@ -1,10 +1,11 @@
 extends Node
 ## Static game content. Emoji are placeholder art until real sprites exist.
 
-const BIN_KEYS := ["plastic", "metal", "wood", "electronics", "hazardous", "mixed"]
+const BIN_KEYS := ["plastic", "metal", "glass", "wood", "electronics", "hazardous", "mixed"]
 const BINS := {
 	"plastic": {"n": "Plastic", "e": "🧴", "p": 2.0},
 	"metal": {"n": "Metal", "e": "🔩", "p": 4.0},
+	"glass": {"n": "Glass", "e": "🫙", "p": 3.0},
 	"wood": {"n": "Wood", "e": "🪵", "p": 3.0},
 	"electronics": {"n": "Electronics", "e": "💾", "p": 8.0},
 	"hazardous": {"n": "Hazardous", "e": "☣️", "p": 6.0},
@@ -25,6 +26,10 @@ const JUNK := [
 	["Rusty wrench", "🔧", "metal", 2],
 	["Car hubcap", "⚙️", "metal", 3],
 	["Boat anchor", "⚓", "metal", 5],
+	["Glass jar", "🫙", "glass", 1],
+	["Beer bottle", "🍺", "glass", 1],
+	["Mirror shard", "🪞", "glass", 1],
+	["Empty bottle", "🍶", "glass", 1],
 	["Driftwood", "🪵", "wood", 2],
 	["Patio chair", "🪑", "wood", 3],
 	["Pallet plank", "📏", "wood", 3],
@@ -63,6 +68,10 @@ const DESCS := {
 	"Rusty wrench": "Solid, cold, and orange with rust. A tool that's seen better days.",
 	"Car hubcap": "A dented steel disc. It rings like a gong when you knock on it.",
 	"Boat anchor": "Cast iron, very heavy, and still very good at its old job.",
+	"Glass jar": "A clear jar with a rusted lid. Rinse it out and it'd hold anything.",
+	"Beer bottle": "Brown glass, label long gone. It clinks against everything.",
+	"Mirror shard": "A jagged piece of silvered glass. Your reflection looks tired. Or is that you?",
+	"Empty bottle": "Clear glass, cork long gone. Whatever message it carried is gone. You could write a new one.",
 	"Driftwood": "Smooth, pale, and grainy. Smells like a campfire waiting to happen.",
 	"Patio chair": "Slatted boards held together with pegs. Splinters included.",
 	"Pallet plank": "Rough-cut lumber with a few nail holes.",
@@ -281,33 +290,101 @@ const LETTERS := [
 ]
 
 # Story letters arrive at set moments, never in bottles.
-# The crow brings these to the Desk when something new opens up. Keys are also story beats.
+# Crow (Walt's old supplier) writes these; Zephyr, his crow, carries them to the Desk when
+# something new opens up. Keys double as story beats. Told once: never delivered in sandbox.
 const STORY_LETTERS := {
 	"crow1": {
 		"id": "crow1", "dev": true, "crow": true, "from": "a crow",
-		"t": "A crow lands on the railing, drops a folded diner receipt at your feet, and stares at you until you pick it up. On the back, in pencil:\n\n\"Nice knife work. The cook at the Low Tide Diner needs fish, and you have fish. Come ashore.\"\n\nWhen you look up, the crow is gone. You never heard it leave.",
+		"t": "A crow lands on the railing, drops a folded diner receipt at your feet, and stares at you until you pick it up. On the back, in pencil:\n\n\"Nice knife work. Walt at the Low Tide Diner needs fish, and you have fish. Go ashore.\n— C.\"\n\nWhen you look up, the crow is gone. You never heard it leave.",
 	},
 	"crow_oven": {
 		"id": "crow_oven", "dev": true, "crow": true, "from": "a crow",
-		"t": "The crow is back, with a recipe card this time. Most of it is smudged. The only legible line: \"Cook it low and slow, and it will tell you where it came from.\"",
+		"t": "The crow is back, with a recipe card in its beak. Most of it is smudged. The legible part:\n\n\"Walt's cooking again. Good. Cook it low and slow, and it'll tell you where it came from.\n— C.\"",
 	},
 	"crow_carpentry": {
-		"id": "crow_carpentry", "dev": true, "crow": true, "from": "a crow",
-		"t": "A wood shaving, curled like a ribbon, tucked under the crow's wing. Written along it: \"The antiques shop on Harbor Street pays well for honest work. Ask about the clock in the window. Don't ask twice.\"",
+		"id": "crow_carpentry", "dev": true, "crow": true, "from": "Zephyr",
+		"t": "A wood shaving, curled like a ribbon, tied to the crow's leg. Written along it:\n\n\"Her name is Zephyr. She's been flying for me longer than I've been writing to you. Don't give her french fries, no matter what she tells you.\n— C.\"",
 	},
 	"crow_crucible": {
-		"id": "crow_crucible", "dev": true, "crow": true, "from": "a crow",
-		"t": "A hardware store receipt for one (1) padlock, paid in cash, dated forty years ago. On the back: \"The lighthouse door was locked from the inside.\"",
+		"id": "crow_crucible", "dev": true, "crow": true, "from": "Zephyr",
+		"t": "Zephyr drops a hardware store receipt for one (1) padlock, paid in cash, dated forty years ago. On the back:\n\n\"I dredged this bay for eleven years. It took everything I had and kept asking for more. I wasn't unlucky. I was looking for the wrong thing.\n— C.\"",
 	},
 	"crow_recycler": {
-		"id": "crow_recycler", "dev": true, "crow": true, "from": "a crow",
-		"t": "A torn page from a tide table. Someone has circled a date that hasn't happened yet, and written: \"Everything comes back. That's the whole trouble with this bay.\"",
+		"id": "crow_recycler", "dev": true, "crow": true, "from": "Zephyr",
+		"t": "A torn page from a tide table. Someone has circled a date that hasn't happened yet.\n\n\"There's an empty storefront on Main Street. It was going to be mine. You'll need more than money to open it; ask around town. They'll help you. They always would have helped me, if I'd asked.\n— C.\"",
 	},
 	"crow_emporium": {
-		"id": "crow_emporium", "dev": true, "crow": true, "from": "a crow",
-		"t": "A brass key on a string, and a note: \"Your own shop, on Main Street. The last owner left in a hurry. Keep the lights on at night.\"",
+		"id": "crow_emporium", "dev": true, "crow": true, "from": "Crow",
+		"t": "Zephyr is waiting on the Emporium's counter the morning you open, with a brass key and a long letter.\n\n\"You did it the way I never could. I kept pulling things out of the water, hoping one of them would be the answer. You made something out of what the bay gave you, and you gave it back to the town.\n\nWalt was my friend. Tell him I'm sorry I left without a word. Tell him I'm all right.\n\nZephyr's decided she likes you better. Keep her. Keep the lights on at night.\n— Crow\"",
 	},
 }
+
+# Rare materials: can't be dredged, only earned from townsfolk. The Emporium needs them.
+const RARES := {
+	"stained_glass": {"n": "Stained glass panes", "e": "🪟"},
+	"old_timber": {"n": "Old-growth timber", "e": "🌲"},
+	"brass": {"n": "Brass fittings", "e": "🔔"},
+	"neon": {"n": "Vintage neon sign", "e": "💡"},
+	"ledger": {"n": "Crow's ledger", "e": "📒"},
+}
+const EMPORIUM_RARES := {"stained_glass": 2, "old_timber": 3, "brass": 3, "neon": 1}
+
+# Goods that only exist once a station is installed (so standing orders don't ask for them early).
+const GOOD_STATION := {"meal": "oven", "knick": "carpentry", "ingot": "crucible", "material": "recycler"}
+
+# Townsfolk requests, offered in order per person. "needs" is {"good": key, "n": N} (goods
+# key, "cooler" for raw fish) or {"fish": name, "n": N}. "requires" gates when it's offered.
+# Once someone's list is done, they give repeatable standing orders instead (see game.gd).
+const QUESTS := [
+	{
+		"id": "w1", "npc": "cook", "title": "Supper rush",
+		"needs": {"good": "fish_dressed", "n": 5}, "reward": {"coins": 150},
+		"ask": "\"Supper rush tonight and my walk-in's empty. Five dressed fish, and I'll pay extra for the trouble.\"",
+		"done": "\"You dress 'em cleaner than Crow ever did.\" He catches your look. \"My old supplier. Everybody called him Crow, on account of the bird that followed him everywhere. Big black thing. Had a name, too. Zephyr, I think.\"",
+	},
+	{
+		"id": "w2", "npc": "cook", "title": "A taste of the reef", "requires": {"depth": 1},
+		"needs": {"fish": "Parrotfish", "n": 3}, "reward": {"coins": 600},
+		"ask": "\"Folks keep asking about those reef fish turning up in the bay. Bring me three parrotfish and I'll put 'em on the specials board.\"",
+		"done": "\"Crow brought me reef fish too, near the end. Said the deeper he went, the stranger the bay got. Said he was looking for something down there. Never did say what.\"",
+	},
+	{
+		"id": "w3", "npc": "cook", "title": "Crow's tab", "requires": {"station": "oven"},
+		"needs": {"good": "meal", "n": 10}, "reward": {"coins": 5000, "rares": {"ledger": 1}},
+		"ask": "\"Found something of Crow's cleaning out the back. Cook me ten meals for the Friday crowd and it's yours. He'd want someone to have it.\"",
+		"done": "He hands you a water-stained ledger. Every page lists catches, dates and depths in tidy pencil. The last page just says: \"Not money. Something to build.\"",
+	},
+	{
+		"id": "d1", "npc": "salvage", "title": "Short on scrap",
+		"needs": {"good": "bin_metal", "n": 20}, "reward": {"coins": 200},
+		"ask": "\"I've got an order I can't fill. Twenty pieces of sorted metal.\"",
+		"done": "\"Crow sold me scrap too, before he went under. Always said the bay gives back what you put into it. Never figured out what he meant.\"",
+	},
+	{
+		"id": "d2", "npc": "salvage", "title": "Windows on the hill", "requires": {"quest": "d1"},
+		"needs": {"good": "bin_glass", "n": 30}, "reward": {"coins": 1500, "rares": {"stained_glass": 2}},
+		"ask": "\"The old church on the hill is fixing its windows. Thirty pieces of sorted glass and I'll split what they pay me.\"",
+		"done": "\"They sent over some old panes they didn't need. Stained glass. Figured you'd find a use for it.\"",
+	},
+	{
+		"id": "r1", "npc": "antiques", "title": "Something for the window",
+		"needs": {"good": "knick", "n": 10}, "reward": {"coins": 20000, "rares": {"old_timber": 3}},
+		"ask": "\"Ten of your carvings for the front window, dear. People stop and look now.\"",
+		"done": "She pays you, then presses a bundle of timber into your arms. \"Old-growth. From the lighthouse keeper's cottage, when they pulled it down. It ought to go into something that lasts.\"",
+	},
+	{
+		"id": "h1", "npc": "hardware", "title": "The marina order",
+		"needs": {"good": "ingot", "n": 10}, "reward": {"coins": 40000, "rares": {"brass": 3}},
+		"ask": "\"Ten ingots. Got a big order from the marina and nobody to cast for it.\"",
+		"done": "\"Here. Brass fittings. Crow ordered these years back and never picked 'em up. Paid in full, though. Seems right they go to you.\"",
+	},
+	{
+		"id": "p1", "npc": "coop", "title": "Summer workshop",
+		"needs": {"good": "material", "n": 10}, "reward": {"coins": 60000, "rares": {"neon": 1}},
+		"ask": "\"Ten loads of reclaimed material for the summer workshop? The kids are building a boat.\"",
+		"done": "\"We rewired an old sign we found behind the co-op. It says EMPORIUM. Nobody knows where it came from. We think it's yours.\"",
+	},
+]
 
 # People in town. Each one buys the goods from the stations they care about.
 # "unlock" is a story beat (a crow letter that has been read) or a station on board.
@@ -328,7 +405,10 @@ const NPCS := {
 	"salvage": {
 		"n": "Dot", "role": "Runs the salvage yard", "e": "🧰",
 		"unlock": {"story": "crow1_read"},
-		"buys": ["bin_plastic", "bin_metal", "bin_wood", "bin_electronics", "bin_hazardous", "bin_mixed"],
+		"buys": [
+			"bin_plastic", "bin_metal", "bin_glass", "bin_wood", "bin_electronics", "bin_hazardous",
+			"bin_mixed",
+		],
 		"intro": "Behind a chain-link fence, someone in coveralls is sorting a mountain of scrap by hand. They don't look up.\n\n\"Walt said you'd come by. I take anything that's sorted. Anything that isn't sorted, I don't want to hear about.\"",
 		"lines": [
 			"\"Sorted? Good. Put it on the scale.\"",

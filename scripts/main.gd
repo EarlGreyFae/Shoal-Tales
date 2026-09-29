@@ -130,6 +130,7 @@ func _ready() -> void:
 	Game.sorted.connect(_on_sorted)
 	Game.hauled.connect(_on_hauled)
 	Game.crow_arrived.connect(Sfx.play.bind("crow"))
+	Game.quest_done.connect(_on_quest_done)
 	shown_coins = Game.s.coins
 	refresh()
 
@@ -258,7 +259,7 @@ func refresh() -> void:
 	var s: Dictionary = Game.s
 	header_labels.streak.text = "🔥 Sort streak %d" % s.streak
 	header_labels.mult.text = "✨ Payout ×%.2f" % (Game.g_mult() * Game.streak_mult())
-	var stars: String = "  ★%d" % s.prestige if s.prestige > 0 else ""
+	var stars: String = "  ★%d · Sandbox" % s.prestige if s.prestige > 0 else ""
 	header_labels.title.text = "🏅 " + Game.title() + stars
 
 	var open_tabs := TABS.filter(func(t): return Game.tab_unlocked(t[0]))
@@ -365,7 +366,7 @@ func _page_dredge() -> void:
 		progress_label.text = "The tray is empty. Drop the dredge, or sell what you've sorted in Storage."
 
 	var bc := _card("Sorting bins")
-	var grid := _grid(bc, Data.BIN_KEYS.size() + 1)
+	var grid := _grid(bc, ceili((Data.BIN_KEYS.size() + 1) / 2.0))
 	for k in Data.BIN_KEYS:
 		grid.add_child(_bin(k))
 	grid.add_child(_bin("cooler"))
@@ -508,6 +509,8 @@ func _item_card(it: Dictionary) -> Control:
 		"junk":
 			sub = "in hand — pick a bin" if selected else "drag to a bin"
 			actions.append(["🔍 Inspect", _inspect.bind(uid), "pickup"])
+			if it.name == "Empty bottle":
+				actions.append(["Keep", Game.empty_keep.bind(uid), "pickup"])
 		"fish":
 			sub = "in hand — click the cooler" if selected else "drag to the cooler"
 		"curio":
@@ -523,9 +526,6 @@ func _item_card(it: Dictionary) -> Control:
 			actions.append(["Open", Game.open_crate.bind(uid), "drop_wood"])
 		"bottle":
 			actions.append(["Open", Game.open_bottle.bind(uid), "pickup"])
-		"empty":
-			actions.append(["Keep", Game.empty_keep.bind(uid), "pickup"])
-			actions.append(["Recycle", Game.empty_sell.bind(uid), "coin"])
 		"animal":
 			sub = "tangled in the net"
 			actions.append(["Set free", Game.free_animal.bind(uid), "splash"])
@@ -563,6 +563,11 @@ func _page_storage() -> void:
 		name_l.size_flags_horizontal = SIZE_EXPAND_FILL
 		r.add_child(name_l)
 		r.add_child(_label("%dc" % roundi(o.v)))
+	for r in s.rares:
+		if int(s.rares[r]) > 0:
+			var rl := _label("%s %s ×%d  (rare)" % [Data.RARES[r].e, Data.RARES[r].n, s.rares[r]])
+			rl.add_theme_color_override("font_color", RAR_COLORS.rare)
+			v.add_child(rl)
 	if s.goods.is_empty() and s.cooler.is_empty():
 		v.add_child(_para("Nothing stored. Sort some junk and cool some fish first.", C_DIM))
 	elif s.emporium:
@@ -777,7 +782,7 @@ func _page_work() -> void:
 	v.add_child(
 		_para(
 			(
-				"Earn %d lifetime coins this run (%d so far). Resets coins, upgrades and stations; keeps your log, letters and magic curios. Each retirement: +10%% payout, −3%% dredge time, and a new title."
+				"Earn %d lifetime coins this run (%d so far). Retiring starts Sandbox mode: the story is over, and it's all about bigger numbers. Resets coins, upgrades and stations; keeps your log, letters, magic curios, rare materials and the Emporium. Each retirement: +10%% payout, −3%% dredge time, and a new title."
 				% [goal, roundi(s.life)]
 			)
 		)
@@ -814,6 +819,28 @@ func _page_town() -> void:
 			C_DIM
 		)
 	)
+
+	# What you're carrying, and who buys it, so you know where to go.
+	var hold := _card("In your hold")
+	var any := false
+	for n in Data.NPC_ORDER:
+		if not Game.npc_unlocked(n):
+			continue
+		var npc: Dictionary = Data.NPCS[n]
+		for g in npc.buys:
+			var h: Dictionary = Game.holding(g)
+			if int(h.n) <= 0:
+				continue
+			any = true
+			var r := _row(hold)
+			var gl := _label("%s ×%d" % [_good_name(g), h.n])
+			gl.size_flags_horizontal = SIZE_EXPAND_FILL
+			r.add_child(gl)
+			r.add_child(_label("%dc" % roundi(h.v), 16, C_DIM))
+			r.add_child(_label("→ %s %s" % [npc.e, npc.n], 16, C_ACCENT))
+	if not any:
+		hold.add_child(_para("Nothing to sell. Process what you can on the ship first.", C_DIM))
+
 	var grid := _grid(content, 2)
 	for n in Data.NPC_ORDER:
 		if not Game.npc_unlocked(n):
@@ -827,23 +854,45 @@ func _page_town() -> void:
 		col.size_flags_horizontal = SIZE_EXPAND_FILL
 		col.add_child(_label(npc.n, 18, C_ACCENT))
 		col.add_child(_label(npc.role, 14, C_DIM))
+		var wants := 0
+		for g in npc.buys:
+			wants += int(Game.holding(g).n)
+		if wants > 0:
+			col.add_child(_label("Would buy %d things from you" % wants, 14, C_GOOD))
+		var q: Dictionary = Game.quest_for(n)
+		if not q.is_empty():
+			var can_hand_in: bool = Game.quest_have(q) >= int(q.needs.n)
+			col.add_child(
+				_label("📜 " + q.title + ("  — ready to hand in!" if can_hand_in else ""), 14, C_ACCENT)
+			)
 		r.add_child(col)
 		r.add_child(_button("Visit", Game.visit.bind(n), false, "pickup"))
+
 	if Game.can_open_emporium():
 		var ev := _card("🏬 An empty storefront on Main Street")
 		ev.add_child(
 			_para(
-				"Open your own Emporium and sell everything at once, straight from Storage.", C_DIM
+				"Open your own Emporium and sell everything at once, straight from Storage. It takes more than money:",
+				C_DIM
 			)
 		)
-		var b := _button(
-			"Open it — %dc" % Data.EMPORIUM_COST,
-			Game.open_emporium,
-			s.coins < Data.EMPORIUM_COST,
-			"coin"
-		)
+		ev.add_child(_para("• %d coins (you have %d)" % [Data.EMPORIUM_COST, roundi(s.coins)]))
+		for rk in Data.EMPORIUM_RARES:
+			var have: int = int(s.rares.get(rk, 0))
+			ev.add_child(
+				_para(
+					"• %s %s ×%d (you have %d)"
+					% [Data.RARES[rk].e, Data.RARES[rk].n, Data.EMPORIUM_RARES[rk], have],
+					C_GOOD if have >= Data.EMPORIUM_RARES[rk] else C_INK
+				)
+			)
+		var b := _button("Open it", Game.open_emporium, not Game.emporium_affordable(), "coin")
 		b.size_flags_horizontal = SIZE_SHRINK_BEGIN
 		ev.add_child(b)
+
+
+func _good_name(g: String) -> String:
+	return "🧊 Raw fish" if g == "cooler" else _goods_name(g)
 
 
 func _npc_view(id: String) -> void:
@@ -870,14 +919,30 @@ func _npc_view(id: String) -> void:
 			continue
 		any = true
 		var gr := _row(shop)
-		var good_name: String = "🧊 Raw fish" if g == "cooler" else _goods_name(g)
-		var nl := _label("%s ×%d" % [good_name, h.n])
+		var nl := _label("%s ×%d" % [_good_name(g), h.n])
 		nl.size_flags_horizontal = SIZE_EXPAND_FILL
 		gr.add_child(nl)
 		gr.add_child(_label("%dc" % roundi(h.v)))
 		gr.add_child(_button("Sell", Game.sell_to.bind(id, g), false, "coin"))
 	if not any:
 		shop.add_child(_para("You don't have anything %s wants right now." % npc.n, C_DIM))
+
+	var q: Dictionary = Game.quest_for(id)
+	var qc := _card("📜 " + (q.title if not q.is_empty() else "Requests"))
+	if q.is_empty():
+		qc.add_child(_para("%s doesn't need anything special right now." % npc.n, C_DIM))
+	else:
+		qc.add_child(_para(q.ask))
+		var needs: Dictionary = q.needs
+		var what: String = needs.fish if needs.has("fish") else Game.good_label(needs.good)
+		var have: int = Game.quest_have(q)
+		var need: int = needs.n
+		qc.add_child(
+			_para("Needs %d × %s  (you have %d)" % [need, what, have], C_GOOD if have >= need else C_DIM)
+		)
+		var hb := _button("Hand it over", Game.complete_quest.bind(id), have < need, "coin")
+		hb.size_flags_horizontal = SIZE_SHRINK_BEGIN
+		qc.add_child(hb)
 
 	if not Game.s.met.has(id):
 		_show_intro.call_deferred(id)
@@ -890,6 +955,18 @@ func _show_intro(id: String) -> void:
 	v.add_child(_label("%s %s — %s" % [npc.e, npc.n, npc.role], 18, C_PAPER_INK))
 	v.add_child(_para(npc.intro, C_PAPER_INK, 17))
 	var b := _button("Deal.", _close_intro.bind(id))
+	b.size_flags_horizontal = SIZE_SHRINK_BEGIN
+	v.add_child(b)
+	b.grab_focus()
+
+
+func _on_quest_done(npc: String, text: String, reward: String) -> void:
+	var info: Dictionary = Data.NPCS[npc]
+	var v := _open_modal()
+	v.add_child(_label("%s %s" % [info.e, info.n], 18, C_PAPER_INK))
+	v.add_child(_para(text, C_PAPER_INK, 17))
+	v.add_child(_para("Reward: " + reward, Color("6b4a12"), 16))
+	var b := _button("Thanks.", _close_modal)
 	b.size_flags_horizontal = SIZE_SHRINK_BEGIN
 	v.add_child(b)
 	b.grab_focus()

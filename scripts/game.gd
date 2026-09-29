@@ -10,6 +10,8 @@ signal sorted(bin: String, correct: bool, weight: int, amount: float)
 signal hauled
 ## The crow dropped a new letter at the Desk.
 signal crow_arrived
+## A townsperson's request was fulfilled.
+signal quest_done(npc: String, text: String, reward: String)
 
 const SAVE_PATH := "user://shoal_tales_save.json"
 const MAX_PENDING_LETTERS := 3
@@ -65,7 +67,6 @@ func _fresh() -> Dictionary:
 		"cooler": [],  # raw fish waiting for the Cutting Board
 		"dressed": 0,
 		"since": {},  # handled since the last station install; drives hidden station unlocks
-		"emporium": false,
 		"town_sel": "",
 	}
 
@@ -84,6 +85,10 @@ func _persistent() -> Dictionary:
 		"story": {},  # story beats that have happened: letter ids, and "<id>_read"
 		"crow_unread": [],  # letters waiting at the Desk
 		"met": {},  # townsfolk whose introduction you've seen
+		"quests_done": {},  # story requests, done once ever
+		"orders": {},  # standing orders filled, per person; they grow with each one
+		"rares": {},  # materials that can't be dredged
+		"emporium": false,  # once opened, it stays yours through prestige
 	}
 
 
@@ -121,8 +126,16 @@ func _load() -> void:
 		it.uid = int(it.uid)
 		if it.has("clicks"):
 			it.clicks = int(it.clicks)
+	for it in s.tray:
+		# Empty bottles used to be their own kind; now they're glass junk.
+		if it.kind == "empty":
+			it.merge(_empty_bottle(), true)
 	for it in s.cooler:
 		it.uid = int(it.uid)
+	for k in s.orders:
+		s.orders[k] = int(s.orders[k])
+	for k in s.rares:
+		s.rares[k] = int(s.rares[k])
 	s.dressed = int(s.dressed)
 	for k in s.since:
 		s.since[k] = int(s.since[k])
@@ -570,9 +583,7 @@ func open_bottle(uid: int) -> void:
 	if it.is_empty():
 		return
 	if randf() < 0.3:
-		it.kind = "empty"
-		it.name = "Empty bottle"
-		it.e = "🫙"
+		it.merge(_empty_bottle(), true)
 		_commit()
 		return
 	var unseen: Array = Data.LETTERS.filter(func(l): return not s.seen.has(l.id))
@@ -605,13 +616,12 @@ func empty_keep(uid: int) -> void:
 	_commit()
 
 
-func empty_sell(uid: int) -> void:
-	var it := _item(uid)
-	if it.is_empty():
-		return
-	_earn(3.0 * g_mult())
-	_drop(it)
-	_commit()
+## A message bottle with nothing inside becomes glass junk (or a bottle for your own letter).
+func _empty_bottle() -> Dictionary:
+	return {
+		"kind": "junk", "name": "Empty bottle", "e": "🍶", "bin": "glass", "w": 1,
+		"base": Data.BINS.glass.p * randf_range(1.0, 1.5),
+	}
 
 
 func free_animal(uid: int) -> void:
@@ -771,7 +781,8 @@ func vote(id: String, v: int) -> void:
 
 ## The crow brings a story letter to the Desk, once per letter ever.
 func deliver_letter(id: String) -> void:
-	if s.story.has(id) or not Data.STORY_LETTERS.has(id):
+	# The story is told once; after prestige the game is a sandbox.
+	if sandbox() or s.story.has(id) or not Data.STORY_LETTERS.has(id):
 		return
 	s.story[id] = true
 	s.crow_unread.append(id)
@@ -830,11 +841,134 @@ func can_open_emporium() -> bool:
 	return next_station() == "" and not s.emporium
 
 
+func emporium_affordable() -> bool:
+	if s.coins < Data.EMPORIUM_COST:
+		return false
+	for r in Data.EMPORIUM_RARES:
+		if int(s.rares.get(r, 0)) < Data.EMPORIUM_RARES[r]:
+			return false
+	return true
+
+
 func open_emporium() -> void:
-	if not can_open_emporium() or s.coins < Data.EMPORIUM_COST:
+	if not can_open_emporium() or not emporium_affordable():
 		return
 	s.coins -= Data.EMPORIUM_COST
+	for r in Data.EMPORIUM_RARES:
+		s.rares[r] = int(s.rares[r]) - Data.EMPORIUM_RARES[r]
 	s.emporium = true
 	toast.emit("Your Emporium is open. You can sell everything at once from Storage.")
 	_commit()
 	deliver_letter("crow_emporium")
+
+
+
+func sandbox() -> bool:
+	return s.prestige > 0
+
+
+# ---------- requests ----------
+
+
+func _quest_open(q: Dictionary) -> bool:
+	var req: Dictionary = q.get("requires", {})
+	if req.has("depth") and not s.unlocked[int(req.depth)]:
+		return false
+	if req.has("station") and not s.st.has(req.station):
+		return false
+	if req.has("quest") and not s.quests_done.has(req.quest):
+		return false
+	return true
+
+
+## What this person is asking for right now, or {} if nothing.
+## Story requests come first, in order; after those, endless standing orders.
+func quest_for(npc: String) -> Dictionary:
+	for q in Data.QUESTS:
+		if q.npc != npc or s.quests_done.has(q.id):
+			continue
+		return q if _quest_open(q) else {}
+	return _standing_order(npc)
+
+
+## A repeatable order that grows each time. Pays the goods' value plus a bonus.
+func _standing_order(npc: String) -> Dictionary:
+	var done: int = int(s.orders.get(npc, 0))
+	var options: Array = Data.NPCS[npc].buys.filter(
+		func(g): return not Data.GOOD_STATION.has(g) or s.st.has(Data.GOOD_STATION[g])
+	)
+	if options.is_empty():
+		return {}
+	var good: String = options[done % options.size()]
+	var n := mini(5 + 3 * done, 80)
+	return {
+		"id": "order", "npc": npc, "title": "Standing order #%d" % (done + 1),
+		"needs": {"good": good, "n": n}, "reward": {"bonus": 0.5 + 0.05 * mini(done, 10)},
+		"ask": "\"Same as always, if you've got it: %d × %s.\"" % [n, good_label(good)],
+		"done": "\"Pleasure doing business.\"",
+	}
+
+
+func good_label(g: String) -> String:
+	if g == "cooler":
+		return "raw fish"
+	if g.begins_with("bin_"):
+		return "sorted " + Data.BINS[g.substr(4)].n.to_lower()
+	return Data.GOODS[g][0].to_lower()
+
+
+## How many of what a request needs you're holding.
+func quest_have(q: Dictionary) -> int:
+	var needs: Dictionary = q.needs
+	if needs.has("fish"):
+		return s.cooler.filter(func(f): return f.name == needs.fish).size()
+	return int(holding(needs.good).n)
+
+
+## Removes n of a good and returns the value removed.
+func _take(good: String, n: int) -> float:
+	if good == "cooler":
+		var taken := 0.0
+		for i in n:
+			taken += s.cooler.pop_front().v
+		return taken
+	var o: Dictionary = s.goods[good]
+	var each: float = o.v / maxf(1.0, o.n)
+	o.n -= n
+	o.v -= each * n
+	if o.n <= 0:
+		s.goods.erase(good)
+	return each * n
+
+
+func _take_fish(fish_name: String, n: int) -> float:
+	var taken := 0.0
+	for f in s.cooler.filter(func(x): return x.name == fish_name).slice(0, n):
+		taken += f.v
+		s.cooler.erase(f)
+	return taken
+
+
+func complete_quest(npc: String) -> void:
+	var q := quest_for(npc)
+	if q.is_empty() or quest_have(q) < int(q.needs.n):
+		return
+	var n: int = q.needs.n
+	var value: float = (
+		_take_fish(q.needs.fish, n) if q.needs.has("fish") else _take(q.needs.good, n)
+	)
+	var rw: Dictionary = q.reward
+	var coins: float = rw.get("coins", 0) + value * rw.get("bonus", 0.0)
+	if not rw.has("bonus"):
+		coins += value  # story requests pay the goods' value on top of the reward
+	_earn(coins)
+	var parts: PackedStringArray = ["%d coins" % roundi(coins)]
+	for r in rw.get("rares", {}):
+		s.rares[r] = int(s.rares.get(r, 0)) + int(rw.rares[r])
+		parts.append("%s %s ×%d" % [Data.RARES[r].e, Data.RARES[r].n, rw.rares[r]])
+	if q.id == "order":
+		s.orders[npc] = int(s.orders.get(npc, 0)) + 1
+	else:
+		s.quests_done[q.id] = true
+	_commit()
+	quest_done.emit(npc, q.done, ", ".join(parts))
