@@ -94,7 +94,7 @@ func _persistent() -> Dictionary:
 		"rares": {},  # materials that can't be dredged
 		"emporium": false,  # once opened, it stays yours through prestige
 		# Emporium state, also kept through prestige.
-		"emp_tab": "floor",
+		"emp_tab": "sell",
 		"decor": [],  # {id, n, e, rar, placed}
 		"slots": Data.DECOR_START_SLOTS,
 		"tickets": 0,
@@ -708,18 +708,17 @@ func sell(g: String) -> void:
 	_commit()
 
 
-func sell_all() -> void:
+## Sell a stack at the Emporium's counter: anything a townsperson would buy.
+func emporium_sell(good: String) -> void:
 	if not s.emporium:
 		return
-	var total := 0.0
-	for g in s.goods:
-		total += s.goods[g].v
-	total += cooler_value()
-	_earn(total)
-	s.goods = {}
-	s.cooler = []
-	toast.emit("Sold everything for %d" % roundi(total))
-	_commit()
+	for npc in Data.NPC_ORDER:
+		if npc_buys(npc).has(good):
+			if good == "cooler":
+				sell_cooler()
+			else:
+				sell(good)
+			return
 
 
 func upgrade(k: String) -> void:
@@ -920,7 +919,7 @@ func open_emporium() -> void:
 		s.rares[r] = int(s.rares[r]) - Data.EMPORIUM_RARES[r]
 	s.emporium = true
 	board_fill()
-	toast.emit("Your Emporium is open. You can sell everything at once from Storage.")
+	toast.emit("Your Emporium is open. Its counter buys every kind of goods, sorted by category.")
 	_commit()
 	deliver_letter("crow_emporium")
 

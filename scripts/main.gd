@@ -634,11 +634,6 @@ func _page_storage() -> void:
 			v.add_child(rl)
 	if s.goods.is_empty() and s.cooler.is_empty() and s.stored.is_empty():
 		v.add_child(_para("Nothing stored. Sort some junk and cool some fish first.", C_DIM))
-	elif s.emporium:
-		v.add_child(HSeparator.new())
-		var b := _button("Sell everything at the Emporium", Game.sell_all, false, "coin")
-		b.size_flags_horizontal = SIZE_SHRINK_BEGIN
-		v.add_child(b)
 	var tip: String = (
 		"Sell your goods to the people in town. Walt at the diner buys fish; Dot at the salvage yard buys sorted bins."
 		if Game.tab_unlocked("town")
@@ -675,7 +670,7 @@ func _page_craft() -> void:
 		v.add_child(_para(r.d))
 		var inp: String = r.inp
 		if inp.begins_with("stored_"):
-			# Stored junk: process item by item, or everything at once.
+			# Stored junk: processed one tap per item.
 			var items: Array = Game.stored_for(inp.substr(7))
 			if items.is_empty():
 				v.add_child(
@@ -985,7 +980,7 @@ func _page_town() -> void:
 		var ev := _card("🏬 An empty storefront on Main Street")
 		ev.add_child(
 			_para(
-				"Open your own Emporium and sell everything at once, straight from Storage. It takes more than money:",
+				"Open your own Emporium: sell every kind of goods in one place, sorted by category. It takes more than money:",
 				C_DIM
 			)
 		)
@@ -1272,6 +1267,7 @@ func _on_volume(value: float, setter: Callable, pct: Label) -> void:
 # ---------- Emporium ----------
 
 const EMP_TABS := [
+	["sell", "🧾 Sell"],
 	["floor", "🌱 Shop floor"],
 	["counter", "☕ Counter"],
 	["puzzles", "🧩 Puzzle bench"],
@@ -1290,6 +1286,8 @@ func _page_emporium() -> void:
 		tabs.add_child(b)
 	arcade_marker = null
 	match s.emp_tab:
+		"sell":
+			_emp_sell()
 		"floor":
 			_emp_floor()
 		"counter":
@@ -1300,6 +1298,33 @@ func _page_emporium() -> void:
 			_emp_arcade()
 		"board":
 			_emp_board()
+
+
+## The Emporium's own counter: every category in one place, sold stack by stack like in town.
+func _emp_sell() -> void:
+	var any := false
+	for npc in Data.NPC_ORDER:
+		var rows := []
+		for g in Game.npc_buys(npc):
+			var h: Dictionary = Game.holding(g)
+			if int(h.n) > 0:
+				rows.append([g, h])
+		if rows.is_empty():
+			continue
+		any = true
+		var total := 0.0
+		for row in rows:
+			total += row[1].v
+		var v := _card("%s  ·  %dc" % [Data.EMPORIUM_CATEGORIES[npc], roundi(total)])
+		for row in rows:
+			var r := _row(v)
+			var nl := _label("%s ×%d" % [_good_name(row[0]), row[1].n])
+			nl.size_flags_horizontal = SIZE_EXPAND_FILL
+			r.add_child(nl)
+			r.add_child(_label("%dc" % roundi(row[1].v)))
+			r.add_child(_button("Sell", Game.emporium_sell.bind(row[0]), false, "coin"))
+	if not any:
+		_card().add_child(_para("Nothing to sell. Your stock will show up here by category.", C_DIM))
 
 
 func _emp_floor() -> void:

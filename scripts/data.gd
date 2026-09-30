@@ -454,7 +454,15 @@ const NPCS := {
 	},
 }
 
-# Opens once every station is installed: sell everything at once from Storage.
+# Opens once every station is installed. Its shop counter sells every category in one place.
+# Each category is the goods one townsperson buys.
+const EMPORIUM_CATEGORIES := {
+	"cook": "🍽️ Food",
+	"salvage": "♻️ Sorted goods",
+	"antiques": "🎎 Crafts & antiques",
+	"hardware": "🔩 Metalwork",
+	"coop": "🧵 Materials",
+}
 const EMPORIUM_COST := 150000
 
 # Stand-ins for player letters until there is a server to share them.
