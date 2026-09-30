@@ -5,8 +5,8 @@ const BIN_KEYS := ["plastic", "metal", "glass", "wood", "electronics", "hazardou
 const BINS := {
 	"plastic": {"n": "Plastic", "e": "🧴", "p": 2.0},
 	"metal": {"n": "Metal", "e": "🔩", "p": 4.0},
-	"glass": {"n": "Glass", "e": "🫙", "p": 3.0},
-	"wood": {"n": "Wood", "e": "🪵", "p": 3.0},
+	"glass": {"n": "Glass", "e": "🥛", "p": 3.0},
+	"wood": {"n": "Wood", "e": "🌳", "p": 3.0},
 	"electronics": {"n": "Electronics", "e": "💾", "p": 8.0},
 	"hazardous": {"n": "Hazardous", "e": "☣️", "p": 6.0},
 	"mixed": {"n": "Mixed", "e": "🗑️", "p": 1.0},
@@ -16,21 +16,21 @@ const BINS := {
 const JUNK := [
 	["Grocery bag", "🛍️", "plastic", 1],
 	["Water bottle", "🥤", "plastic", 1],
-	["Flip-flop", "🩴", "plastic", 1],
-	["Beach bucket", "🪣", "plastic", 2],
+	["Flip-flop", "👡", "plastic", 1],
+	["Beach bucket", "🏖️", "plastic", 2],
 	["Pool noodle", "🌭", "plastic", 1],
 	["Six-pack rings", "⭕", "plastic", 1],
 	["Soda can", "🥫", "metal", 1],
-	["Bike wheel", "🛞", "metal", 3],
+	["Bike wheel", "🚲", "metal", 3],
 	["Shopping cart", "🛒", "metal", 5],
 	["Rusty wrench", "🔧", "metal", 2],
 	["Car hubcap", "⚙️", "metal", 3],
 	["Boat anchor", "⚓", "metal", 5],
-	["Glass jar", "🫙", "glass", 1],
+	["Glass jar", "🍯", "glass", 1],
 	["Beer bottle", "🍺", "glass", 1],
-	["Mirror shard", "🪞", "glass", 1],
+	["Mirror shard", "🔷", "glass", 1],
 	["Empty bottle", "🍶", "glass", 1],
-	["Driftwood", "🪵", "wood", 2],
+	["Driftwood", "🎋", "wood", 2],
 	["Patio chair", "🪑", "wood", 3],
 	["Pallet plank", "📏", "wood", 3],
 	["Soggy couch", "🛋️", "wood", 5],
@@ -156,13 +156,13 @@ const CURIOS := [
 	["Motel room key", "🔑"],
 ]
 
-const ANIMALS := [["Sea turtle", "🐢"], ["Seal pup", "🦭"], ["Seagull", "🐦"], ["Otter", "🦦"]]
+const ANIMALS := [["Sea turtle", "🐢"], ["Dolphin calf", "🐬"], ["Seagull", "🐦"], ["Otter", "🦦"]]
 
 # [rarity, value multiplier, weight out of 100]
 const RARITY := [["common", 1.0, 60], ["uncommon", 2.5, 25], ["rare", 6.0, 11], ["epic", 15.0, 4]]
 
 const MAGIC := [
-	{"id": "pearl", "n": "Warm Sea Glass", "e": "🫧", "d": "+5% payout"},
+	{"id": "pearl", "n": "Warm Sea Glass", "e": "💠", "d": "+5% payout"},
 	{"id": "tooth", "n": "Stopped Pocket Watch", "e": "⏱️", "d": "−5% dredge time"},
 	{"id": "lantern", "n": "Radio That Hums When Off", "e": "📻", "d": "+1 basket slot"},
 	{"id": "crown", "n": "Photo of an Empty Room", "e": "🖼️", "d": "+15% curio value"},
@@ -216,7 +216,7 @@ const STATIONS := {
 		"tease": "You catch yourself wondering what all this fish would taste like cooked.",
 	},
 	"carpentry": {
-		"n": "Carpentry Bench", "e": "🪚", "cost": 15000,
+		"n": "Carpentry Bench", "e": "🪓", "cost": 15000,
 		"d": "Turns the wood bin into knick-knacks.",
 		"needs": {"stat": "wood", "count": 150},
 		"tease": "The wood bin is filling up. It seems a shame to just sell good lumber.",
@@ -239,7 +239,7 @@ const GOODS := {
 	"fish_dressed": ["Dressed fish", "🍣"],
 	"meal": ["Meals", "🍲"],
 	"ingot": ["Ingots", "🧱"],
-	"knick": ["Carved knick-knacks", "🪆"],
+	"knick": ["Carved knick-knacks", "🎎"],
 	"material": ["Base materials", "📦"],
 }
 
@@ -257,7 +257,7 @@ const RECIPES := [
 		"f": 2.5, "d": "Melt metal into ingots.",
 	},
 	{
-		"st": "carpentry", "n": "Carpentry Bench", "e": "🪚", "inp": "bin_wood", "out": "knick",
+		"st": "carpentry", "n": "Carpentry Bench", "e": "🪓", "inp": "bin_wood", "out": "knick",
 		"f": 2.2, "d": "Build knick-knacks from wood.",
 	},
 	{
@@ -323,7 +323,7 @@ const STORY_LETTERS := {
 
 # Rare materials: can't be dredged, only earned from townsfolk. The Emporium needs them.
 const RARES := {
-	"stained_glass": {"n": "Stained glass panes", "e": "🪟"},
+	"stained_glass": {"n": "Stained glass panes", "e": "🌈"},
 	"old_timber": {"n": "Old-growth timber", "e": "🌲"},
 	"brass": {"n": "Brass fittings", "e": "🔔"},
 	"neon": {"n": "Vintage neon sign", "e": "💡"},
@@ -480,7 +480,7 @@ const TITLES := [
 const DECOR_BONUS := {"common": 0.005, "uncommon": 0.01, "rare": 0.025, "epic": 0.05}
 const DECOR := {
 	"common": [
-		["fern", "Potted fern", "🪴"],
+		["fern", "Potted fern", "🌱"],
 		["net", "Fishing-net drape", "🕸️"],
 		["chalk", "Chalkboard menu", "📋"],
 		["lights", "String lights", "💡"],
@@ -488,9 +488,9 @@ const DECOR := {
 	],
 	"uncommon": [
 		["wheel", "Ship's wheel", "☸️"],
-		["porthole", "Brass porthole mirror", "🪞"],
+		["porthole", "Brass porthole mirror", "⭕"],
 		["jukebox", "Jukebox", "📻"],
-		["buoy", "Painted buoy", "🛟"],
+		["buoy", "Painted buoy", "🔴"],
 	],
 	"rare": [
 		["marlin", "Mounted marlin", "🐟"],
@@ -499,7 +499,7 @@ const DECOR := {
 	],
 	"epic": [
 		["lens", "Lighthouse lens", "🔆"],
-		["perch", "Zephyr's perch", "🪶"],
+		["perch", "Zephyr's perch", "🐦"],
 		["boat", "Model of Crow's boat", "⛵"],
 	],
 }
@@ -534,19 +534,19 @@ const BOARD_SIZE := 3
 const COSMETICS := {
 	"keychain": [
 		["Rusty anchor keychain", "⚓"],
-		["Sea glass keychain", "🫧"],
+		["Sea glass keychain", "💠"],
 		["Tiny brass bell", "🔔"],
 		["Lighthouse charm", "🗼"],
-		["Crow feather", "🪶"],
+		["Crow feather", "🖤"],
 		["Golden fish", "🐠"],
 	],
 	"pet": [
 		["Hermit crab", "🦀"],
 		["Ship's cat", "🐈"],
-		["Harbor seal", "🦭"],
+		["Tiny penguin", "🐧"],
 		["Pelican", "🐦"],
 		["Otter", "🦦"],
-		["Zephyr's cousin", "🐦‍⬛"],
+		["Zephyr's cousin", "🐦"],
 	],
 	"border": [
 		["Driftwood", "8a6a45"],
@@ -678,7 +678,7 @@ const PACKS := [
 	{
 		"id": "ferry", "n": "The Night Ferry", "prestige": 6,
 		"junk": [
-			["Ferry life ring", "🛟", "plastic", 2, "Moulded plastic, stencilled with the name of a ferry that stopped running in 1974."],
+			["Ferry life ring", "⭕", "plastic", 2, "Moulded plastic, stencilled with the name of a ferry that stopped running in 1974."],
 			["Ship's bell", "🔔", "metal", 4, "Heavy bronze. It rings once on its own when you set it down."],
 			["Passenger manifest", "📜", "mixed", 1, "Paper in a plastic sleeve with a brass clip. Every name on it is yours."],
 		],
@@ -716,11 +716,11 @@ const RELIC_CHANCE := 0.04
 const RELIC_TIERS := [
 	{
 		"prestige": 7, "rar": "legendary", "mult": 40.0,
-		"items": [["Crow's first lure", "🪝"], ["The mayor's lost medal", "🎖️"], ["A key to the third tide", "🗝️"]],
+		"items": [["Crow's first lure", "🎣"], ["The mayor's lost medal", "🎖️"], ["A key to the third tide", "🗝️"]],
 	},
 	{
 		"prestige": 10, "rar": "mythic", "mult": 100.0,
-		"items": [["A jar of lighthouse light", "🫙"], ["Zephyr's first feather", "🪶"]],
+		"items": [["A jar of lighthouse light", "🔦"], ["Zephyr's first feather", "🖤"]],
 	},
 	{
 		"prestige": 13, "rar": "otherworldly", "mult": 250.0,

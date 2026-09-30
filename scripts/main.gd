@@ -34,10 +34,11 @@ const TABS := [
 	["map", "🗺️ Map"],
 	["guild", "🤝 Guild"],
 ]
+const DREDGE_WIDTH := 820.0
 const DragCard := preload("res://scripts/ui/drag_card.gd")
 const BinDrop := preload("res://scripts/ui/bin_drop.gd")
 const DESK_TABS := [
-	["crow", "🐦‍⬛ Crow"],
+	["crow", "🐦 Crow"],
 	["library", "Letters"],
 	["log", "Collector's Log"],
 	["magic", "Magic Curios"],
@@ -371,12 +372,15 @@ func refresh() -> void:
 func _page_dredge() -> void:
 	var s: Dictionary = Game.s
 	var keychain: Array = Game.look("keychain")
+	# Everything sits in a centred column so nothing you pick up is out at the screen edges.
+	var col := _center_column(DREDGE_WIDTH)
 	var v := _card(
 		"%s  ·  basket holds %d/%d%s"
 		% [
 			Data.DEPTHS[s.depth].n, Game.basket(), Data.MAX_BASKET,
 			("   " + keychain[1] + " " + keychain[0]) if keychain else ""
-		]
+		],
+		col
 	)
 	var busy: bool = Game.dredging()
 	var has_catch: bool = not s.tray.is_empty()
@@ -384,7 +388,7 @@ func _page_dredge() -> void:
 	var b := _button(txt, _start_dredge, busy or has_catch)
 	b.add_theme_font_size_override("font_size", 22)
 	b.custom_minimum_size = Vector2(300, 56)
-	b.size_flags_horizontal = SIZE_SHRINK_BEGIN
+	b.size_flags_horizontal = SIZE_SHRINK_CENTER
 	v.add_child(b)
 	progress = ProgressBar.new()
 	progress.show_percentage = false
@@ -392,16 +396,13 @@ func _page_dredge() -> void:
 	progress.value = Game.dredge_progress() * 100.0
 	v.add_child(progress)
 	progress_label = _label("", 14, C_DIM)
+	progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(progress_label)
-	var tally: PackedStringArray = []
-	for k in Data.BIN_KEYS:
-		tally.append("%s %d" % [Data.BINS[k].e, int(s.goods.get("bin_" + k, {"n": 0}).n)])
-	tally.append("🧊 %d" % s.cooler.size())
-	v.add_child(_label("Bins:  " + "   ".join(tally), 14, C_DIM))
 
 	if has_catch:
-		var c := _card("Catch — clear it all to dredge again")
+		var c := _card("Catch — clear it all to dredge again", col)
 		var flow := HFlowContainer.new()
+		flow.alignment = FlowContainer.ALIGNMENT_CENTER
 		flow.add_theme_constant_override("h_separation", 8)
 		flow.add_theme_constant_override("v_separation", 8)
 		c.add_child(flow)
@@ -432,9 +433,21 @@ func _page_dredge() -> void:
 
 	var rules := _active_rules()
 	if not rules.is_empty():
-		var rc := _card("Your stations have changed where some things go")
+		var rc := _card("Your stations have changed where some things go", col)
 		for line in rules:
 			rc.add_child(_para(line, C_DIM, 14))
+
+
+## A fixed-width column centred on the page.
+func _center_column(width: float) -> VBoxContainer:
+	var cc := CenterContainer.new()
+	cc.size_flags_horizontal = SIZE_EXPAND_FILL
+	content.add_child(cc)
+	var column := VBoxContainer.new()
+	column.custom_minimum_size.x = width
+	column.add_theme_constant_override("separation", 10)
+	cc.add_child(column)
+	return column
 
 
 func _active_rules() -> Array:
@@ -693,7 +706,7 @@ func _page_desk() -> void:
 			b.add_theme_stylebox_override("normal", _box(C_PANEL2, C_ACCENT, 8, 2, 8))
 		tabs.add_child(b)
 	if not s.crow_unread.is_empty() and s.sub != "crow":
-		_card().add_child(_para("🐦‍⬛ The crow is waiting on your desk with a letter.", C_ACCENT))
+		_card().add_child(_para("🐦 The crow is waiting on your desk with a letter.", C_ACCENT))
 	match s.sub:
 		"crow":
 			_desk_crow()
@@ -711,7 +724,7 @@ func _page_desk() -> void:
 
 func _desk_crow() -> void:
 	var s: Dictionary = Game.s
-	var v := _card("🐦‍⬛ The crow's letters")
+	var v := _card("🐦 The crow's letters")
 	if s.crow_unread.is_empty() and s.story.is_empty():
 		v.add_child(_para("No crow has visited yet.", C_DIM))
 	for id in s.crow_unread:
@@ -1118,7 +1131,7 @@ func show_letter(letter: Dictionary) -> void:
 	var dev: bool = letter.get("dev", false)
 	var head: String = ("🖋 Lore Letter from " if dev else "✉️ Letter from ") + str(letter.from)
 	if letter.get("crow", false):
-		head = "🐦‍⬛ A letter from " + str(letter.from)
+		head = "🐦 A letter from " + str(letter.from)
 	v.add_child(_label(head, 18, C_PAPER_INK))
 	v.add_child(_para(letter.t, C_PAPER_INK, 18))
 	var b := _button("Fold it away", _close_modal)
@@ -1219,7 +1232,7 @@ func _on_volume(value: float, setter: Callable, pct: Label) -> void:
 # ---------- Emporium ----------
 
 const EMP_TABS := [
-	["floor", "🪴 Shop floor"],
+	["floor", "🌱 Shop floor"],
 	["counter", "☕ Counter"],
 	["puzzles", "🧩 Puzzle bench"],
 	["arcade", "🕹️ Arcade"],
@@ -1251,7 +1264,7 @@ func _page_emporium() -> void:
 
 func _emp_floor() -> void:
 	var s: Dictionary = Game.s
-	var v := _card("🪴 Shop floor — %d/%d spots used" % [Game.placed_count(), s.slots])
+	var v := _card("🌱 Shop floor — %d/%d spots used" % [Game.placed_count(), s.slots])
 	var pet: Array = Game.look("pet")
 	if pet:
 		v.add_child(_para("%s Your %s is napping by the door." % [pet[1], pet[0].to_lower()], C_DIM))
@@ -1456,7 +1469,7 @@ func _desk_profile() -> void:
 	var fr := _row(frame)
 	fr.add_theme_constant_override("separation", 16)
 	var pet: Array = Game.look("pet")
-	fr.add_child(_label("🧑‍✈️", 56))
+	fr.add_child(_label("👤", 56))
 	var col := VBoxContainer.new()
 	var badge: Array = Game.look("badge")
 	col.add_child(_label(((badge[1] + " ") if badge else "") + Game.title(), 22, C_ACCENT))
