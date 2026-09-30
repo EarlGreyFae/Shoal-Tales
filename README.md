@@ -14,6 +14,7 @@ Saves go to Godot's user folder (`%APPDATA%\Godot\app_userdata\Shoal Tales` on W
 
 | Path | What it is |
 | --- | --- |
+| `MANIFEST.md` | Full handoff: how every system works, where to change things, coding gotchas. |
 | `project.godot` | Project settings: window size, autoloads, renderer. |
 | `scenes/main.tscn` | The one scene; its script builds the UI. |
 | `scripts/data.gd` | All game content: junk, fish, curios, magic curios, depths, upgrades, stations, recipes, letters. |
