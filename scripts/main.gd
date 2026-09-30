@@ -19,6 +19,9 @@ const RAR_COLORS := {
 	"uncommon": Color("6fc3ff"),
 	"rare": Color("c58bff"),
 	"epic": Color("ffb347"),
+	"legendary": Color("ff6b6b"),
+	"mythic": Color("7cf7d4"),
+	"otherworldly": Color("f7a8ff"),
 }
 const TABS := [
 	["dredge", "⚓ Dredge"],
@@ -144,6 +147,16 @@ func _ready() -> void:
 	Game.quest_done.connect(_on_quest_done)
 	shown_coins = Game.s.coins
 	refresh()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	# Hidden dev menu. OS.is_debug_build() is false in release exports (the Steam build).
+	var key := event as InputEventKey
+	if key and key.pressed and not key.echo and key.keycode == KEY_F9 and OS.is_debug_build():
+		if is_instance_valid(modal):
+			_close_modal()
+		else:
+			_show_dev()
 
 
 func _process(delta: float) -> void:
@@ -576,7 +589,8 @@ func _goods_name(g: String) -> String:
 	if g.begins_with("bin_"):
 		var bin: Dictionary = Data.BINS[g.substr(4)]
 		return "%s %s bin" % [bin.e, bin.n]
-	return "%s %s" % [Data.GOODS[g][1], Data.GOODS[g][0]]
+	var info: Array = Game.goods_info(g)
+	return "%s %s" % [info[1], info[0]]
 
 
 func _page_storage() -> void:
@@ -634,15 +648,16 @@ func _page_craft() -> void:
 			var fb := _button("%s %s" % [f.e, f.name], Game.dress_fish.bind(int(f.uid)), false, "chop")
 			fb.custom_minimum_size = Vector2(130, 56)
 			flow.add_child(fb)
-	for i in Data.RECIPES.size():
-		var r: Dictionary = Data.RECIPES[i]
+	var recipes: Array = Game.all_recipes()
+	for i in recipes.size():
+		var r: Dictionary = recipes[i]
 		if not Game.has_station(r.st):
 			continue
 		var v := _card("%s %s" % [r.e, r.n])
 		v.add_child(_para(r.d))
 		var inp: String = r.inp
 		var inp_name: String = (
-			Data.BINS[inp.substr(4)].n + " bin" if inp.begins_with("bin_") else Data.GOODS[inp][0]
+			Data.BINS[inp.substr(4)].n + " bin" if inp.begins_with("bin_") else Game.goods_info(inp)[0]
 		)
 		var have: bool = s.goods.has(inp)
 		var amount: String = "%d units" % s.goods[inp].n if have else "none"
@@ -730,7 +745,7 @@ func _desk_library() -> void:
 	var s: Dictionary = Game.s
 	var v := _card("Letter library (%d found)" % s.seen.size())
 	var shown := 0
-	for l in Data.LETTERS + Data.SEED_COMMUNITY + s.outbox:
+	for l in Game.letter_pool() + Data.SEED_COMMUNITY + s.outbox:
 		var mine: bool = l.get("mine", false)
 		if not (mine or s.seen.has(l.id)):
 			continue
@@ -757,12 +772,21 @@ func _desk_library() -> void:
 func _desk_log() -> void:
 	var v := _card("Collector's Log")
 	var g := _grid(v, 4)
-	for c in Data.CURIOS:
-		var r: String = Game.s.log.get(c[0], "")
-		var cv := _card("", g, C_PANEL2)
-		cv.custom_minimum_size.x = 200
-		cv.add_child(_label(("%s %s" % [c[1], c[0]]) if r != "" else "❔ ???"))
-		cv.add_child(_label(r if r != "" else "not found", 14, RAR_COLORS.get(r, C_DIM)))
+	for c in Game.curio_pool():
+		_log_entry(g, c)
+	for tier in Game.relic_tiers():
+		v.add_child(_label("Relics · %s" % tier.rar, 16, RAR_COLORS.get(tier.rar, C_ACCENT)))
+		var rg := _grid(v, 4)
+		for c in tier.items:
+			_log_entry(rg, c)
+
+
+func _log_entry(g: Control, c: Array) -> void:
+	var r: String = Game.s.log.get(c[0], "")
+	var cv := _card("", g, C_PANEL2)
+	cv.custom_minimum_size.x = 200
+	cv.add_child(_label(("%s %s" % [c[1], c[0]]) if r != "" else "❔ ???"))
+	cv.add_child(_label(r if r != "" else "not found", 14, RAR_COLORS.get(r, C_DIM)))
 
 
 func _desk_magic() -> void:
@@ -828,16 +852,27 @@ func _page_work() -> void:
 
 func _page_map() -> void:
 	var s: Dictionary = Game.s
+	_card().add_child(
+		_para(
+			"Each retirement opens a deeper part of the bay. Deeper water pays more and brings stranger fish.",
+			C_DIM
+		)
+	)
 	for i in Data.DEPTHS.size():
 		var d: Dictionary = Data.DEPTHS[i]
 		var here: bool = s.depth == i
 		var v := _card(d.n + ("  (current)" if here else ""))
 		v.add_child(_para("Payout ×%.1f" % d.m, C_DIM))
-		var unlocked: bool = s.unlocked[i]
-		var txt: String = "Sail here" if unlocked else "Chart it — %dc" % d.cost
-		var b := _button(txt, Game.set_depth.bind(i), here or not (unlocked or Game.can_chart(i)))
+		var unlocked: bool = Game.depth_unlocked(i)
+		var txt: String = "Sail here" if unlocked else "🔒 Opens at prestige %d" % d.prestige
+		var b := _button(txt, Game.set_depth.bind(i), here or not unlocked, "splash")
 		b.size_flags_horizontal = SIZE_SHRINK_BEGIN
 		v.add_child(b)
+	var packs: Array = Game.packs_unlocked()
+	if not packs.is_empty():
+		var pv := _card("Themed packs in the bay")
+		for pk in packs:
+			pv.add_child(_label("• " + pk.n))
 
 
 func _page_town() -> void:
@@ -861,7 +896,7 @@ func _page_town() -> void:
 		if not Game.npc_unlocked(n):
 			continue
 		var npc: Dictionary = Data.NPCS[n]
-		for g in npc.buys:
+		for g in Game.npc_buys(n):
 			var h: Dictionary = Game.holding(g)
 			if int(h.n) <= 0:
 				continue
@@ -889,7 +924,7 @@ func _page_town() -> void:
 		col.add_child(_label(npc.n, 18, C_ACCENT))
 		col.add_child(_label(npc.role, 14, C_DIM))
 		var wants := 0
-		for g in npc.buys:
+		for g in Game.npc_buys(n):
 			wants += int(Game.holding(g).n)
 		if wants > 0:
 			col.add_child(_label("Would buy %d things from you" % wants, 14, C_GOOD))
@@ -947,7 +982,7 @@ func _npc_view(id: String) -> void:
 
 	var shop := _card("Sells to %s" % npc.n)
 	var any := false
-	for g in npc.buys:
+	for g in Game.npc_buys(id):
 		var h: Dictionary = Game.holding(g)
 		if int(h.n) <= 0:
 			continue
@@ -1283,11 +1318,16 @@ func _emp_counter() -> void:
 		var cv := _card("", v, C_PANEL2)
 		var r := _row(cv)
 		r.add_child(_label(c.e, 36))
+		var col := VBoxContainer.new()
+		col.size_flags_horizontal = SIZE_EXPAND_FILL
+		col.add_child(_label(str(c.get("who", "A customer")), 16, C_ACCENT))
+		if c.has("line"):
+			col.add_child(_para(c.line, C_DIM, 14))
 		var want: String = "“A %s%s, please.”" % [
 			Game.drink_name(c.drink).to_lower(), " and something to eat" if c.food else ""
 		]
-		var wl := _para(want)
-		r.add_child(wl)
+		col.add_child(_para(want))
+		r.add_child(col)
 		r.add_child(_button("Serve", Game.serve.bind(int(c.id), drink_sel.duplicate()), false, "coin"))
 
 
@@ -1465,3 +1505,124 @@ func _desk_profile() -> void:
 			if kind[0] == "border" and unlocked:
 				b.add_theme_color_override("font_color", Color(items[i][1]))
 			r.add_child(b)
+
+
+
+# ---------- dev menu ----------
+
+
+func _show_dev() -> void:
+	var v := _open_modal()
+	v.add_child(_label("🛠️ Dev menu (F9)  ·  debug builds only", 18, C_PAPER_INK))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(720, 520)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(scroll)
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 6)
+	scroll.add_child(col)
+	var sections := [
+		[
+			"Jump to a point in the game (wipes the save)",
+			[
+				["Fresh start", Game.dev_preset.bind("fresh")],
+				["Town just opened", Game.dev_preset.bind("town")],
+				["Basket 32", Game.dev_preset.bind("basket32")],
+				["All stations", Game.dev_preset.bind("stations")],
+				["Emporium open", Game.dev_preset.bind("emporium")],
+				["Sandbox (prestige 1)", Game.dev_preset.bind("sandbox")],
+				["All depths (prestige 3)", Game.dev_preset.bind("depths")],
+				["All packs (prestige 6)", Game.dev_preset.bind("packs")],
+				["All relics (prestige 13)", Game.dev_preset.bind("relics")],
+			],
+		],
+		[
+			"Money and basket",
+			[
+				["+1,000 coins", Game.dev_coins.bind(1000.0)],
+				["+100,000 coins", Game.dev_coins.bind(100000.0)],
+				["+10,000,000 coins", Game.dev_coins.bind(10000000.0)],
+				["Basket 8", Game.dev_basket.bind(8)],
+				["Basket 16", Game.dev_basket.bind(16)],
+				["Basket 32", Game.dev_basket.bind(32)],
+				["Fast dredging on/off", Game.dev_toggle_fast],
+				["Finish current dredge", Game.dev_finish_dredge],
+			],
+		],
+		[
+			"Put things on the tray",
+			[
+				["5 junk", Game.dev_fill_tray.bind("junk", 5)],
+				["5 fish", Game.dev_fill_tray.bind("fish", 5)],
+				["3 curios", Game.dev_fill_tray.bind("curio", 3)],
+				["Magic curio", Game.dev_fill_tray.bind("magic", 1)],
+				["2 crates", Game.dev_fill_tray.bind("crate", 2)],
+				["3 bottles", Game.dev_fill_tray.bind("bottle", 3)],
+				["2 animals", Game.dev_fill_tray.bind("animal", 2)],
+				["2 puzzle curios", Game.dev_fill_tray.bind("puzzle", 2)],
+			],
+		],
+		[
+			"Goods and collections",
+			[
+				["+20 of every good", Game.dev_give_goods.bind(20)],
+				["+5 of every rare material", Game.dev_give_rares],
+				["All magic curios", Game.dev_all_magic],
+			],
+		],
+		[
+			"Story and town",
+			[
+				["Open the town", Game.dev_open_town],
+				["Deliver next crow letter", Game.dev_next_letter],
+				["Meet everyone", Game.dev_meet_all],
+				["Finish all story requests", Game.dev_finish_story_quests],
+			],
+		],
+		[
+			"Stations",
+			[
+				["Meet next station's hidden requirement", Game.dev_station_reqs],
+				["Install next station", Game.dev_install_next],
+				["Install all stations", Game.dev_install_all],
+			],
+		],
+		[
+			"Emporium",
+			[
+				["Open the Emporium", Game.dev_open_emporium],
+				["A customer walks in", Game.dev_customer],
+				["+3 puzzle curios", Game.dev_puzzles.bind(3)],
+				["+500 tickets", Game.dev_tickets.bind(500)],
+				["Common decoration", Game.dev_decor.bind("common")],
+				["Rare decoration", Game.dev_decor.bind("rare")],
+				["Epic decoration", Game.dev_decor.bind("epic")],
+			],
+		],
+		[
+			"Prestige",
+			[
+				["Retire now (ignore the goal)", Game.dev_prestige],
+			],
+		],
+	]
+	for sec in sections:
+		col.add_child(_label(sec[0], 16, Color("6b4a12")))
+		var flow := HFlowContainer.new()
+		flow.add_theme_constant_override("h_separation", 6)
+		flow.add_theme_constant_override("v_separation", 6)
+		col.add_child(flow)
+		for b in sec[1]:
+			flow.add_child(_button(b[0], b[1], false, "pickup"))
+	col.add_child(
+		_para(
+			"Prestige now: %d · Basket: %d · Fast dredging: %s"
+			% [Game.s.prestige, Game.basket(), "on" if Game.dev_fast else "off"],
+			C_PAPER_INK,
+			14
+		)
+	)
+	var close := _button("Close", _close_modal)
+	close.size_flags_horizontal = SIZE_SHRINK_BEGIN
+	v.add_child(close)

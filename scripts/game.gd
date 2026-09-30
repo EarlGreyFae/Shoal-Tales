@@ -18,6 +18,8 @@ const MAX_PENDING_LETTERS := 3
 const LETTER_MAX_CHARS := 400
 
 var s: Dictionary = {}
+## Dev menu: near-instant dredging. Not saved.
+var dev_fast := false
 
 
 func _ready() -> void:
@@ -206,6 +208,8 @@ func streak_mult() -> float:
 
 
 func dredge_secs() -> float:
+	if dev_fast:
+		return 0.3
 	var t: float = 6.0 * pow(0.88, s.up.speed)
 	t *= 1.0 - minf(0.5, 0.03 * s.prestige)
 	return t * (0.95 if has_magic("tooth") else 1.0)
@@ -253,7 +257,7 @@ func tab_unlocked(t: String) -> bool:
 				or not s.story.is_empty()
 			)
 		"map":
-			return basket() >= 12 or s.depth > 0
+			return s.prestige >= 1
 		"guild":
 			return false  # needs the online server
 		"town":
@@ -335,14 +339,14 @@ func _new_item(kind: String) -> Dictionary:
 	var it := {"uid": _next_uid(), "kind": kind}
 	match kind:
 		"junk":
-			var j: Array = Data.JUNK.pick_random()
+			var j: Array = junk_pool().pick_random()
 			var base: float = Data.BINS[j[2]].p * randf_range(1.0, 1.5)
 			it.merge({"name": j[0], "e": j[1], "bin": j[2], "w": j[3], "base": base})
 		"fish":
-			var f: Array = Data.FISH_BY_DEPTH[s.depth].pick_random()
+			var f: Array = fish_pool(s.depth).pick_random()
 			it.merge({"name": f[0], "e": f[1], "w": f[3], "base": f[2] * randf_range(0.8, 1.4)})
 		"curio":
-			var c: Array = Data.CURIOS.pick_random()
+			var c: Array = curio_pool().pick_random()
 			it.merge(
 				{"name": c[0], "e": c[1], "base": randf_range(12.0, 22.0), "clicks": 0, "done": false}
 			)
@@ -498,6 +502,16 @@ func clean(uid: int) -> void:
 			break
 	it.rar = r[0]
 	it.value = it.base * r[1] * (1.15 if has_magic("crown") else 1.0)
+	# Late-game relics: a rarer curio from one of the unlocked relic tiers.
+	var tiers := relic_tiers()
+	if not tiers.is_empty() and randf() < Data.RELIC_CHANCE:
+		var tier: Dictionary = tiers.pick_random()
+		var relic: Array = tier.items.pick_random()
+		it.name = relic[0]
+		it.e = relic[1]
+		it.rar = tier.rar
+		it.value = it.base * tier.mult
+		toast.emit("A %s relic: %s!" % [tier.rar, relic[0]])
 	_commit()
 
 
@@ -535,7 +549,7 @@ func _count(stat: String) -> void:
 
 ## What Inspect says: a hint at the default bin, plus any station that changes it.
 func inspect_text(it: Dictionary) -> String:
-	var text: String = Data.DESCS.get(it.name, "Hard to say what this was.")
+	var text: String = Data.DESCS.get(it.name, _pack_desc(it.name))
 	for r in Data.SORT_RULES:
 		if r.item == it.name and s.st.has(r.st):
 			text += " " + r.hint
@@ -615,7 +629,7 @@ func open_bottle(uid: int) -> void:
 		it.merge(_empty_bottle(), true)
 		_commit()
 		return
-	var unseen: Array = Data.LETTERS.filter(func(l): return not s.seen.has(l.id))
+	var unseen: Array = letter_pool().filter(func(l): return not s.seen.has(l.id))
 	var comm: Array = community_pool().filter(func(l): return _unread_ok(l))
 	var letter: Dictionary
 	if not unseen.is_empty() and (randf() < 0.5 or comm.is_empty()):
@@ -623,7 +637,7 @@ func open_bottle(uid: int) -> void:
 	elif not comm.is_empty():
 		letter = comm.pick_random()
 	else:
-		letter = Data.LETTERS.pick_random()
+		letter = letter_pool().pick_random()
 	if not s.seen.has(letter.id):
 		s.seen.append(letter.id)
 	_drop(it)
@@ -668,13 +682,13 @@ func has_station(st: String) -> bool:
 
 
 func process_recipe(i: int) -> void:
-	var r: Dictionary = Data.RECIPES[i]
+	var r: Dictionary = all_recipes()[i]
 	if not has_station(r.st) or not s.goods.has(r.inp):
 		return
 	var o: Dictionary = s.goods[r.inp]
 	_add(r.out, o.n, o.v * r.f)
 	s.goods.erase(r.inp)
-	toast.emit("Processed into %s" % Data.GOODS[r.out][0])
+	toast.emit("Processed into %s" % goods_info(r.out)[0])
 	_commit()
 
 
@@ -734,18 +748,14 @@ func build_station(k: String) -> void:
 	_commit()
 
 
-func can_chart(i: int) -> bool:
-	return not s.unlocked[i] and s.unlocked[i - 1] and s.coins >= Data.DEPTHS[i].cost
+## Depths open one per retirement: the first run is Shallows only.
+func depth_unlocked(i: int) -> bool:
+	return s.prestige >= int(Data.DEPTHS[i].prestige)
 
 
 func set_depth(i: int) -> void:
-	if s.unlocked[i]:
+	if depth_unlocked(i):
 		s.depth = i
-	elif can_chart(i):
-		s.coins -= Data.DEPTHS[i].cost
-		s.unlocked[i] = true
-		s.depth = i
-		toast.emit("Charted %s" % Data.DEPTHS[i].n)
 	_commit()
 
 
@@ -753,12 +763,20 @@ func set_depth(i: int) -> void:
 func retire() -> void:
 	if s.life < prestige_goal():
 		return
+	_do_retire()
+
+
+func _do_retire() -> void:
 	var keep := {}
 	for k in _persistent():
 		keep[k] = s[k]
 	keep.prestige = s.prestige + 1
 	s = _fresh()
 	s.merge(keep, true)
+	s.depth = mini(s.prestige, Data.DEPTHS.size() - 1)
+	var pack := _pack_at(s.prestige)
+	if not pack.is_empty():
+		toast.emit("New in the bay: %s" % pack.n)
 	# Show off the newest prestige rewards straight away.
 	for kind in s.looks:
 		s.looks[kind] = mini(s.prestige, Data.COSMETICS[kind].size()) - 1
@@ -812,9 +830,9 @@ func vote(id: String, v: int) -> void:
 
 
 ## The crow brings a story letter to the Desk, once per letter ever.
-func deliver_letter(id: String) -> void:
+func deliver_letter(id: String, force := false) -> void:
 	# The story is told once; after prestige the game is a sandbox.
-	if sandbox() or s.story.has(id) or not Data.STORY_LETTERS.has(id):
+	if (sandbox() and not force) or s.story.has(id) or not Data.STORY_LETTERS.has(id):
 		return
 	s.story[id] = true
 	s.crow_unread.append(id)
@@ -861,7 +879,7 @@ func holding(good: String) -> Dictionary:
 
 
 func sell_to(npc: String, good: String) -> void:
-	if not npc_unlocked(npc) or not Data.NPCS[npc].buys.has(good):
+	if not npc_unlocked(npc) or not npc_buys(npc).has(good):
 		return
 	if good == "cooler":
 		sell_cooler()
@@ -905,7 +923,7 @@ func sandbox() -> bool:
 
 func _quest_open(q: Dictionary) -> bool:
 	var req: Dictionary = q.get("requires", {})
-	if req.has("depth") and not s.unlocked[int(req.depth)]:
+	if req.has("depth") and not depth_unlocked(int(req.depth)):
 		return false
 	if req.has("station") and not s.st.has(req.station):
 		return false
@@ -917,7 +935,7 @@ func _quest_open(q: Dictionary) -> bool:
 ## What this person is asking for right now, or {} if nothing.
 ## Story requests come first, in order; after those, endless standing orders.
 func quest_for(npc: String) -> Dictionary:
-	for q in Data.QUESTS:
+	for q in quest_pool():
 		if q.npc != npc or s.quests_done.has(q.id):
 			continue
 		return q if _quest_open(q) else {}
@@ -927,8 +945,8 @@ func quest_for(npc: String) -> Dictionary:
 ## A repeatable order that grows each time. Pays the goods' value plus a bonus.
 func _standing_order(npc: String) -> Dictionary:
 	var done: int = int(s.orders.get(npc, 0))
-	var options: Array = Data.NPCS[npc].buys.filter(
-		func(g): return not Data.GOOD_STATION.has(g) or s.st.has(Data.GOOD_STATION[g])
+	var options: Array = npc_buys(npc).filter(
+		func(g): return can_make(g)
 	)
 	if options.is_empty():
 		return {}
@@ -947,7 +965,7 @@ func good_label(g: String) -> String:
 		return "raw fish"
 	if g.begins_with("bin_"):
 		return "sorted " + Data.BINS[g.substr(4)].n.to_lower()
-	return Data.GOODS[g][0].to_lower()
+	return goods_info(g)[0].to_lower()
 
 
 ## How many of what a request needs you're holding.
@@ -1129,10 +1147,18 @@ func _customer_tick() -> void:
 	if _now() < s.next_customer:
 		return
 	s.next_customer = _now() + Data.CUSTOMER_EVERY
+	add_customer()
+
+
+## Someone walks in: a friend from town, a local, a traveller, a tourist, or an event visitor.
+func add_customer() -> void:
+	var person := _pick_person()
 	s.customers.append(
 		{
 			"id": _next_uid(),
-			"e": Data.CUSTOMERS.pick_random(),
+			"e": person[1],
+			"who": person[0],
+			"line": person[2],
 			"drink": [
 				randi() % Data.DRINK_BASES.size(),
 				randi() % Data.DRINK_FLAVORS.size(),
@@ -1209,8 +1235,12 @@ func _board_goods() -> Array:
 	for k in Data.BIN_KEYS:
 		goods.append("bin_" + k)
 	for g in Data.GOOD_STATION:
-		if s.st.has(Data.GOOD_STATION[g]):
+		if can_make(g):
 			goods.append(g)
+	for p in packs_unlocked():
+		for g in p.goods:
+			if can_make(g):
+				goods.append(g)
 	return goods
 
 
@@ -1262,3 +1292,338 @@ func look(kind: String) -> Array:
 	if i < 0 or i >= looks_unlocked(kind):
 		return []
 	return Data.COSMETICS[kind][i]
+
+
+
+func _pick_person() -> Array:
+	var friends := []
+	for id in Data.NPC_ORDER:
+		if s.met.has(id):
+			var npc: Dictionary = Data.NPCS[id]
+			friends.append(["%s (%s)" % [npc.n, npc.role], npc.e, Data.FRIEND_LINES.pick_random()])
+	var roll := randf() * 100.0
+	for kind in Data.CUSTOMER_ODDS:
+		roll -= Data.CUSTOMER_ODDS[kind]
+		if roll < 0.0:
+			if kind == "friend":
+				if not friends.is_empty():
+					return friends.pick_random()
+			else:
+				return Data.CUSTOMER_PEOPLE[kind].pick_random()
+	return Data.CUSTOMER_PEOPLE.citizen.pick_random()
+
+
+# ---------- prestige content: packs and relics ----------
+
+
+func packs_unlocked() -> Array:
+	return Data.PACKS.filter(func(p): return s.prestige >= int(p.prestige))
+
+
+func _pack_at(prestige: int) -> Dictionary:
+	for p in Data.PACKS:
+		if int(p.prestige) == prestige:
+			return p
+	return {}
+
+
+func relic_tiers() -> Array:
+	return Data.RELIC_TIERS.filter(func(t): return s.prestige >= int(t.prestige))
+
+
+func junk_pool() -> Array:
+	var out: Array = Data.JUNK.duplicate()
+	for p in packs_unlocked():
+		out.append_array(p.junk)
+	return out
+
+
+func curio_pool() -> Array:
+	var out: Array = Data.CURIOS.duplicate()
+	for p in packs_unlocked():
+		out.append_array(p.curios)
+	return out
+
+
+func fish_pool(depth: int) -> Array:
+	var out: Array = Data.FISH_BY_DEPTH[depth].duplicate()
+	for p in packs_unlocked():
+		out.append_array(p.fish.get(depth, []))
+	return out
+
+
+func letter_pool() -> Array:
+	var out: Array = Data.LETTERS.duplicate()
+	for p in packs_unlocked():
+		out.append_array(p.letters)
+	return out
+
+
+func quest_pool() -> Array:
+	var out: Array = Data.QUESTS.duplicate()
+	for p in packs_unlocked():
+		out.append_array(p.quests)
+	return out
+
+
+func all_recipes() -> Array:
+	var out: Array = Data.RECIPES.duplicate()
+	for p in packs_unlocked():
+		out.append_array(p.recipes)
+	return out
+
+
+## [name, emoji] for any good, including ones added by packs.
+func goods_info(g: String) -> Array:
+	if Data.GOODS.has(g):
+		return Data.GOODS[g]
+	for p in Data.PACKS:
+		if p.goods.has(g):
+			return p.goods[g]
+	return [g, "📦"]
+
+
+## What someone in town buys: their usual goods plus any pack products made for them.
+func npc_buys(npc: String) -> Array:
+	var out: Array = Data.NPCS[npc].buys.duplicate()
+	for p in packs_unlocked():
+		for r in p.recipes:
+			if r.buyer == npc:
+				out.append(r.out)
+	return out
+
+
+func _pack_desc(item_name: String) -> String:
+	for p in Data.PACKS:
+		for j in p.junk:
+			if j[0] == item_name:
+				return j[4]
+	return "Hard to say what this was."
+
+
+
+## Whether the station that makes this good is on board (raw goods always count).
+func can_make(g: String) -> bool:
+	if Data.GOOD_STATION.has(g):
+		return s.st.has(Data.GOOD_STATION[g])
+	for p in Data.PACKS:
+		for r in p.recipes:
+			if r.out == g:
+				return s.st.has(r.st)
+	return true
+
+
+
+# ---------- dev menu (debug builds only; see main.gd) ----------
+
+
+func dev_coins(n: float) -> void:
+	_earn(n)
+	_commit()
+
+
+func dev_basket(size: int) -> void:
+	s.up.basket = clampi(size - 3, 0, Data.UPS.basket.max)
+	_commit()
+
+
+func dev_toggle_fast() -> void:
+	dev_fast = not dev_fast
+	toast.emit("Dev: fast dredging %s" % ("on" if dev_fast else "off"))
+	_commit()
+
+
+func dev_finish_dredge() -> void:
+	if dredging():
+		s.dredge_end = _now()
+
+
+func dev_fill_tray(kind: String, count: int) -> void:
+	for i in count:
+		match kind:
+			"magic":
+				s.tray.append(
+					{
+						"uid": _next_uid(), "kind": "curio", "magic": true,
+						"name": "Strange glowing curio", "e": "✨", "base": 0.0, "clicks": 0, "done": false,
+					}
+				)
+			"puzzle":
+				s.tray.append(
+					{"uid": _next_uid(), "kind": "puzzle", "name": "Puzzle curio", "e": "🧩", "rar": _roll_rarity()}
+				)
+			_:
+				s.tray.append(_new_item(kind))
+	_commit()
+
+
+func dev_give_goods(n: int) -> void:
+	for k in Data.BIN_KEYS:
+		_add("bin_" + k, n, n * Data.BINS[k].p * 1.25)
+	_add("fish_dressed", n, n * 16.0)
+	for g in Data.GOOD_STATION:
+		if can_make(g):
+			_add(g, n, n * 35.0)
+	for p in packs_unlocked():
+		for g in p.goods:
+			if can_make(g):
+				_add(g, n, n * 60.0)
+	for i in n:
+		var f: Array = fish_pool(s.depth).pick_random()
+		s.cooler.append({"uid": _next_uid(), "name": f[0], "e": f[1], "v": f[2] * g_mult()})
+	toast.emit("Dev: +%d of every good" % n)
+	_commit()
+
+
+func dev_give_rares() -> void:
+	for r in Data.RARES:
+		s.rares[r] = int(s.rares.get(r, 0)) + 5
+	_commit()
+
+
+func dev_station_reqs() -> void:
+	var k := next_station()
+	if k != "":
+		var needs: Dictionary = Data.STATIONS[k].needs
+		s.since[needs.stat] = int(needs.count)
+		toast.emit("Dev: requirement met for %s (basket must also be %d)" % [Data.STATIONS[k].n, Data.STATIONS_UNLOCK_BASKET])
+	_commit()
+
+
+func dev_install_next() -> void:
+	var k := next_station()
+	if k == "":
+		return
+	s.st[k] = true
+	s.since = {}
+	deliver_letter("crow_" + k, true)
+	_commit()
+
+
+func dev_install_all() -> void:
+	while next_station() != "":
+		dev_install_next()
+
+
+func dev_next_letter() -> void:
+	for id in Data.STORY_LETTERS:
+		if not s.story.has(id):
+			deliver_letter(id, true)
+			return
+
+
+func dev_open_town() -> void:
+	s.story.crow1 = true
+	s.story.crow1_read = true
+	if not s.seen.has("crow1"):
+		s.seen.append("crow1")
+	_commit()
+
+
+func dev_meet_all() -> void:
+	for id in Data.NPC_ORDER:
+		s.met[id] = true
+	_commit()
+
+
+func dev_finish_story_quests() -> void:
+	for q in quest_pool():
+		if s.quests_done.has(q.id):
+			continue
+		s.quests_done[q.id] = true
+		for r in q.reward.get("rares", {}):
+			s.rares[r] = int(s.rares.get(r, 0)) + int(q.reward.rares[r])
+	_commit()
+
+
+func dev_open_emporium() -> void:
+	s.emporium = true
+	board_fill()
+	deliver_letter("crow_emporium", true)
+	_commit()
+
+
+func dev_customer() -> void:
+	add_customer()
+	_commit()
+
+
+func dev_puzzles(n: int) -> void:
+	for i in n:
+		s.puzzles.append(_roll_rarity())
+	_commit()
+
+
+func dev_tickets(n: int) -> void:
+	s.tickets += n
+	_commit()
+
+
+func dev_decor(rar: String) -> void:
+	_grant_decor(rar)
+	_commit()
+
+
+func dev_all_magic() -> void:
+	s.magic = Data.MAGIC.map(func(m): return m.id)
+	_commit()
+
+
+## Retire right now, ignoring the lifetime-coins goal.
+func dev_prestige() -> void:
+	_do_retire()
+
+
+func dev_reset() -> void:
+	s = _fresh()
+	s.merge(_persistent())
+	dev_fast = false
+	toast.emit("Dev: save wiped")
+	_commit()
+
+
+## Jump straight to a point in the game. Each builds on the one before it.
+func dev_preset(preset: String) -> void:
+	dev_reset()
+	if preset == "fresh":
+		return
+	# Town just opened
+	dev_basket(5)
+	_earn(300)
+	dev_open_town()
+	if preset == "town":
+		return
+	# Full basket, ready for stations
+	dev_basket(32)
+	_earn(20000)
+	dev_meet_all()
+	dev_give_goods(30)
+	if preset == "basket32":
+		return
+	# Every station installed
+	dev_install_all()
+	dev_give_goods(40)
+	if preset == "stations":
+		return
+	# Emporium open
+	dev_finish_story_quests()
+	dev_open_emporium()
+	dev_puzzles(3)
+	dev_tickets(300)
+	for r in ["common", "uncommon", "rare"]:
+		_grant_decor(r)
+	for i in 3:
+		add_customer()
+	if preset == "emporium":
+		return
+	# Prestige presets: retire up to the target, then rebuild the run.
+	var target: int = {"sandbox": 1, "depths": 3, "packs": 6, "relics": 13}.get(preset, 1)
+	s.prestige = target - 1
+	_do_retire()
+	dev_basket(32)
+	dev_install_all()
+	dev_meet_all()
+	_earn(100000)
+	dev_give_goods(40)
+	toast.emit("Dev: prestige %d, basket 32, all stations" % s.prestige)
+	_commit()

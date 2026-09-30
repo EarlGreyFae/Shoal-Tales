@@ -170,22 +170,23 @@ const MAGIC := [
 	{"id": "heart", "n": "Lighthouse Key", "e": "🗝️", "d": "+10% payout"},
 ]
 
-# w = relative odds of each kind of catch at this depth
+# w = relative odds of each kind of catch at this depth.
+# "prestige" = how many retirements it takes to reach it. The first run is Shallows only.
 const DEPTHS := [
 	{
-		"n": "Shallows", "cost": 0, "m": 1.0,
+		"n": "Shallows", "prestige": 0, "m": 1.0,
 		"w": {"junk": 56, "fish": 14, "curio": 7, "crate": 5, "bottle": 6, "animal": 6},
 	},
 	{
-		"n": "Coral Reef", "cost": 200, "m": 1.5,
+		"n": "Coral Reef", "prestige": 1, "m": 1.5,
 		"w": {"junk": 42, "fish": 26, "curio": 12, "crate": 6, "bottle": 7, "animal": 7},
 	},
 	{
-		"n": "Deep Trench", "cost": 800, "m": 2.2,
+		"n": "Deep Trench", "prestige": 2, "m": 2.2,
 		"w": {"junk": 46, "fish": 14, "curio": 18, "crate": 8, "bottle": 7, "animal": 7},
 	},
 	{
-		"n": "The Abyss", "cost": 3000, "m": 3.5,
+		"n": "The Abyss", "prestige": 3, "m": 3.5,
 		"w": {"junk": 38, "fish": 14, "curio": 24, "crate": 10, "bottle": 8, "animal": 6},
 	},
 ]
@@ -196,8 +197,9 @@ const UP_KEYS := ["basket", "speed", "clean", "luck"]
 const UP_REVEAL := {"basket": 0, "speed": 6, "clean": 10, "luck": 16}
 const UPS := {
 	"speed": {"n": "Faster winch", "d": "Dredge time −12%", "base": 60, "g": 1.9, "max": 8},
-	# Basket cost is base + sq * level², tuned so reaching 32 slots takes about a day of play.
-	"basket": {"n": "Bigger basket", "d": "+1 item per haul", "base": 20, "sq": 70, "max": 29},
+	# Basket cost is base + sq * level², tuned so reaching 32 slots in the Shallows takes about
+# a day of play (~7 hours by simulation).
+	"basket": {"n": "Bigger basket", "d": "+1 item per haul", "base": 20, "sq": 13, "max": 29},
 	"clean": {"n": "Soft brush", "d": "Fewer clicks to clean", "base": 100, "g": 2.5, "max": 3},
 	"luck": {"n": "Lucky charm", "d": "Better rarity & magic odds", "base": 120, "g": 2.2, "max": 5},
 }
@@ -209,23 +211,23 @@ const STATION_ORDER := ["oven", "carpentry", "crucible", "recycler"]
 # station was installed. The player only sees "tease" until it's met.
 const STATIONS := {
 	"oven": {
-		"n": "Oven", "e": "🔥", "cost": 30000, "d": "Cooks dressed fish into meals.",
+		"n": "Oven", "e": "🔥", "cost": 8000, "d": "Cooks dressed fish into meals.",
 		"needs": {"stat": "dressed", "count": 40},
 		"tease": "You catch yourself wondering what all this fish would taste like cooked.",
 	},
 	"carpentry": {
-		"n": "Carpentry Bench", "e": "🪚", "cost": 60000,
+		"n": "Carpentry Bench", "e": "🪚", "cost": 15000,
 		"d": "Turns the wood bin into knick-knacks.",
 		"needs": {"stat": "wood", "count": 150},
 		"tease": "The wood bin is filling up. It seems a shame to just sell good lumber.",
 	},
 	"crucible": {
-		"n": "Crucible", "e": "🌋", "cost": 100000, "d": "Melts the metal bin into ingots.",
+		"n": "Crucible", "e": "🌋", "cost": 25000, "d": "Melts the metal bin into ingots.",
 		"needs": {"stat": "metal", "count": 200},
 		"tease": "All that scrap metal. If only you had a way to melt it down.",
 	},
 	"recycler": {
-		"n": "Recycling Machine", "e": "♻️", "cost": 160000,
+		"n": "Recycling Machine", "e": "♻️", "cost": 40000,
 		"d": "Breaks the mixed bin into base materials.",
 		"needs": {"stat": "mixed", "count": 200},
 		"tease": "The mixed bin is the one nobody wants. There must be something useful in there.",
@@ -343,14 +345,14 @@ const QUESTS := [
 		"done": "\"You dress 'em cleaner than Crow ever did.\" He catches your look. \"My old supplier. Everybody called him Crow, on account of the bird that followed him everywhere. Big black thing. Had a name, too. Zephyr, I think.\"",
 	},
 	{
-		"id": "w2", "npc": "cook", "title": "A taste of the reef", "requires": {"depth": 1},
-		"needs": {"fish": "Parrotfish", "n": 3}, "reward": {"coins": 600},
-		"ask": "\"Folks keep asking about those reef fish turning up in the bay. Bring me three parrotfish and I'll put 'em on the specials board.\"",
+		"id": "w2", "npc": "cook", "title": "Sea bass special",
+		"needs": {"fish": "Sea bass", "n": 3}, "reward": {"coins": 600},
+		"ask": "\"Folks keep asking for sea bass. Bring me three and I'll put 'em on the specials board.\"",
 		"done": "\"Crow brought me reef fish too, near the end. Said the deeper he went, the stranger the bay got. Said he was looking for something down there. Never did say what.\"",
 	},
 	{
 		"id": "w3", "npc": "cook", "title": "Crow's tab", "requires": {"station": "oven"},
-		"needs": {"good": "meal", "n": 10}, "reward": {"coins": 5000, "rares": {"ledger": 1}},
+		"needs": {"good": "meal", "n": 10}, "reward": {"coins": 3000, "rares": {"ledger": 1}},
 		"ask": "\"Found something of Crow's cleaning out the back. Cook me ten meals for the Friday crowd and it's yours. He'd want someone to have it.\"",
 		"done": "He hands you a water-stained ledger. Every page lists catches, dates and depths in tidy pencil. The last page just says: \"Not money. Something to build.\"",
 	},
@@ -368,19 +370,19 @@ const QUESTS := [
 	},
 	{
 		"id": "r1", "npc": "antiques", "title": "Something for the window",
-		"needs": {"good": "knick", "n": 10}, "reward": {"coins": 20000, "rares": {"old_timber": 3}},
+		"needs": {"good": "knick", "n": 10}, "reward": {"coins": 5000, "rares": {"old_timber": 3}},
 		"ask": "\"Ten of your carvings for the front window, dear. People stop and look now.\"",
 		"done": "She pays you, then presses a bundle of timber into your arms. \"Old-growth. From the lighthouse keeper's cottage, when they pulled it down. It ought to go into something that lasts.\"",
 	},
 	{
 		"id": "h1", "npc": "hardware", "title": "The marina order",
-		"needs": {"good": "ingot", "n": 10}, "reward": {"coins": 40000, "rares": {"brass": 3}},
+		"needs": {"good": "ingot", "n": 10}, "reward": {"coins": 10000, "rares": {"brass": 3}},
 		"ask": "\"Ten ingots. Got a big order from the marina and nobody to cast for it.\"",
 		"done": "\"Here. Brass fittings. Crow ordered these years back and never picked 'em up. Paid in full, though. Seems right they go to you.\"",
 	},
 	{
 		"id": "p1", "npc": "coop", "title": "Summer workshop",
-		"needs": {"good": "material", "n": 10}, "reward": {"coins": 60000, "rares": {"neon": 1}},
+		"needs": {"good": "material", "n": 10}, "reward": {"coins": 15000, "rares": {"neon": 1}},
 		"ask": "\"Ten loads of reclaimed material for the summer workshop? The kids are building a boat.\"",
 		"done": "\"We rewired an old sign we found behind the co-op. It says EMPORIUM. Nobody knows where it came from. We think it's yours.\"",
 	},
@@ -449,7 +451,7 @@ const NPCS := {
 }
 
 # Opens once every station is installed: sell everything at once from Storage.
-const EMPORIUM_COST := 500000
+const EMPORIUM_COST := 150000
 
 # Stand-ins for player letters until there is a server to share them.
 const SEED_COMMUNITY := [
@@ -563,3 +565,165 @@ const COSMETICS := {
 		["Legend", "🌟"],
 	],
 }
+
+
+# ---------- Counter customers ----------
+# Townsfolk you've met also drop in. [name, emoji, what they say]
+const CUSTOMER_PEOPLE := {
+	"citizen": [
+		["Mrs. Okafor, retired teacher", "👵", "\"I taught half this town to read. The other half, I'm still working on.\""],
+		["The mail carrier", "🧑", "\"Three letters for the lighthouse this week. Nobody's lived there in forty years.\""],
+		["Deputy Lu", "👮", "\"Quiet week. Too quiet, if you ask the sheriff.\""],
+		["A librarian on her lunch break", "👩", "\"Someone keeps returning a tide table from 1981. Every week.\""],
+		["A kid with a skateboard", "🧒", "\"Is it true you found a fish with no name?\""],
+	],
+	"traveler": [
+		["A hiker with an enormous backpack", "🧗", "\"Walked here from the next town. Took longer than the map said. A lot longer.\""],
+		["A trucker passing through", "🧔", "\"GPS says this town doesn't exist. Coffee says otherwise.\""],
+		["A cyclist in bright spandex", "🚴", "\"Is that road always foggy, or just today?\""],
+	],
+	"tourist": [
+		["A family on a beach trip", "👨‍👩‍👧", "\"The kids want to see the lighthouse. Is it open?\""],
+		["A photographer chasing the light", "📸", "\"The sunsets here are wrong. Beautiful, but wrong.\""],
+		["A couple on their honeymoon", "💑", "\"We meant to go somewhere else. We're glad we didn't.\""],
+	],
+	"event": [
+		["A ghost-tour guide", "🕯️", "\"Tonight's tour ends at the lighthouse. It always does. We never plan it that way.\""],
+		["A man in a raincoat on a dry day", "🧥", "\"When's the next tide? The third one, I mean.\""],
+		["A traveling carnival barker", "🎪", "\"Roll up! Our carnival sank here in 1962, you know. Still tours the bay some nights.\""],
+	],
+}
+# Odds out of 100 for who walks in. Townsfolk you've met are included under "friend".
+const CUSTOMER_ODDS := {"friend": 30, "citizen": 30, "traveler": 15, "tourist": 17, "event": 8}
+const FRIEND_LINES := [
+	"\"Just stopping in. Don't tell anyone I'm not at work.\"",
+	"\"Heard good things about this place. Figured I'd see for myself.\"",
+	"\"The usual, whatever that turns out to be.\"",
+]
+
+# ---------- Themed packs ----------
+# After the Abyss is reached (prestige 3), each further retirement opens one pack. A pack adds:
+#   junk:    [name, emoji, bin, weight, Inspect text]
+#   curios:  [name, emoji]
+#   fish:    {depth: [[name, emoji, value, weight], ...]}
+#   letters: bottle Lore Letters
+#   quests:  townsfolk requests (same shape as QUESTS)
+#   recipes: station recipes (same shape as RECIPES) with "buyer": who buys the product
+#   goods:   the products those recipes make, {key: [name, emoji]}
+const PACKS := [
+	{
+		"id": "lighthouse", "n": "The Lighthouse", "prestige": 4,
+		"junk": [
+			["Cracked lens prism", "🔺", "glass", 2, "Thick, heavy glass, cut in careful rings. It throws rainbows on your deck."],
+			["Keeper's lantern", "🏮", "metal", 3, "A brass-and-iron lantern. The wick is still warm. It shouldn't be."],
+			["Logbook binding", "📕", "mixed", 1, "Leather, thread, glue and paper. The pages inside are blank except for tomorrow's date."],
+		],
+		"curios": [["Keeper's pocket watch", "⏱️"], ["Fresnel lens shard", "🔆"]],
+		"fish": {1: [["Lamp-eye snapper", "🐠", 24.0, 2]], 3: [["Beacon fish", "🐟", 90.0, 2]]},
+		"letters": [
+			{
+				"id": "pk_l1", "dev": true, "from": "Unsigned",
+				"t": "The light went dark on a Tuesday. The keeper walked out on Wednesday. Nobody saw him come back, but somebody keeps winding the clock.",
+			},
+		],
+		"quests": [
+			{
+				"id": "pk_q1", "npc": "antiques", "title": "The keeper's clock",
+				"needs": {"good": "bin_glass", "n": 40}, "reward": {"coins": 20000, "rares": {"stained_glass": 1}},
+				"ask": "\"The clock in my window came from the lighthouse. Its glass face is cracked. Forty pieces of good glass and I'll find a match.\"",
+				"done": "\"There.\" The clock starts ticking the moment she closes the case. She didn't wind it. \"...Well. That's new.\"",
+			},
+		],
+		"recipes": [
+			{
+				"st": "oven", "n": "Keeper's chowder", "e": "🥣", "inp": "meal", "out": "chowder",
+				"f": 1.8, "d": "A thick chowder from the lighthouse keeper's recipe. Walt pays well for it.",
+				"buyer": "cook",
+			},
+		],
+		"goods": {"chowder": ["Keeper's chowder", "🥣"]},
+	},
+	{
+		"id": "carnival", "n": "The Sunken Carnival", "prestige": 5,
+		"junk": [
+			["Carousel horse", "🎠", "wood", 4, "Carved and painted wood, gilt flaking off. One eye is still bright."],
+			["Ticket booth sign", "🎟️", "metal", 3, "Stamped tin with painted letters: ADMIT ONE. The price is in a currency you don't recognise."],
+			["Prize goldfish bag", "🛍️", "plastic", 1, "A knotted plastic bag, still full of water. The goldfish inside is fine. Somehow."],
+		],
+		"curios": [["Fortune-teller card", "🃏"], ["Brass carousel ring", "💍"]],
+		"fish": {0: [["Candy-striped wrasse", "🐠", 12.0, 1]], 2: [["Ringmaster eel", "🐍", 40.0, 3]]},
+		"letters": [
+			{
+				"id": "pk_c1", "dev": true, "from": "Unsigned",
+				"t": "The carnival came to town in the summer of '62 and set up on the old pier. The pier washed out in a storm that night. On calm evenings you can still hear the calliope from the water.",
+			},
+		],
+		"quests": [
+			{
+				"id": "pk_q2", "npc": "coop", "title": "Carousel restoration",
+				"needs": {"good": "knick", "n": 25}, "reward": {"coins": 30000, "rares": {"old_timber": 2}},
+				"ask": "\"We found a carousel horse on the beach. We want to rebuild the whole carousel. Twenty-five carvings to start?\"",
+				"done": "\"It turned by itself last night. Just once. Priya says it's the wind. There wasn't any wind.\"",
+			},
+		],
+		"recipes": [
+			{
+				"st": "carpentry", "n": "Carousel figure", "e": "🎠", "inp": "knick", "out": "carousel",
+				"f": 2.4, "d": "Painted carousel animals. The antiques shop can't keep them in stock.",
+				"buyer": "antiques",
+			},
+		],
+		"goods": {"carousel": ["Carousel figures", "🎠"]},
+	},
+	{
+		"id": "ferry", "n": "The Night Ferry", "prestige": 6,
+		"junk": [
+			["Ferry life ring", "🛟", "plastic", 2, "Moulded plastic, stencilled with the name of a ferry that stopped running in 1974."],
+			["Ship's bell", "🔔", "metal", 4, "Heavy bronze. It rings once on its own when you set it down."],
+			["Passenger manifest", "📜", "mixed", 1, "Paper in a plastic sleeve with a brass clip. Every name on it is yours."],
+		],
+		"curios": [["Ferry ticket stub", "🎫"], ["Captain's compass", "🧭"]],
+		"fish": {2: [["Fog herring", "🐟", 28.0, 1]], 3: [["Ferryman's pike", "🐟", 110.0, 3]]},
+		"letters": [
+			{
+				"id": "pk_f1", "dev": true, "from": "Unsigned",
+				"t": "The last ferry leaves at midnight. It stopped running fifty years ago. Buy a ticket anyway; the conductor gets lonely.",
+			},
+		],
+		"quests": [
+			{
+				"id": "pk_q3", "npc": "hardware", "title": "Bells for the harbour",
+				"needs": {"good": "ingot", "n": 30}, "reward": {"coins": 45000, "rares": {"brass": 2}},
+				"ask": "\"Harbour master wants the fog bells recast. Thirty ingots. Says the ferry needs to hear them. I didn't ask which ferry.\"",
+				"done": "\"Rang 'em once to test. Something out in the fog rang back.\"",
+			},
+		],
+		"recipes": [
+			{
+				"st": "crucible", "n": "Brass fog bell", "e": "🔔", "inp": "ingot", "out": "bell",
+				"f": 2.6, "d": "Cast fog bells. Hank sells them to every boat in the harbour.",
+				"buyer": "hardware",
+			},
+		],
+		"goods": {"bell": ["Brass fog bells", "🔔"]},
+	},
+]
+
+# ---------- Relics ----------
+# Once the packs run out, a rarer tier of curio opens every few retirements.
+# Relics turn up when cleaning curios, at RELIC_CHANCE, from the unlocked tiers.
+const RELIC_CHANCE := 0.04
+const RELIC_TIERS := [
+	{
+		"prestige": 7, "rar": "legendary", "mult": 40.0,
+		"items": [["Crow's first lure", "🪝"], ["The mayor's lost medal", "🎖️"], ["A key to the third tide", "🗝️"]],
+	},
+	{
+		"prestige": 10, "rar": "mythic", "mult": 100.0,
+		"items": [["A jar of lighthouse light", "🫙"], ["Zephyr's first feather", "🪶"]],
+	},
+	{
+		"prestige": 13, "rar": "otherworldly", "mult": 250.0,
+		"items": [["A map of a town that isn't here", "🗺️"], ["The tide itself, folded", "🌊"]],
+	},
+]

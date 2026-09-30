@@ -23,9 +23,17 @@ Saves go to Godot's user folder (`%APPDATA%\Godot\app_userdata\Shoal Tales` on W
 | `scripts/sfx.gd` | Plays sounds from `assets/sfx/`. |
 | `assets/sfx/` | Placeholder sounds I synthesized. Replace any of them with a real sound of the same name (`drop_metal.wav`, `pickup.wav`, …). |
 
+## Dev menu
+
+Press **F9** while running from the Godot editor to open a hidden developer menu: jump to any
+point in the game (town, basket 32, all stations, Emporium, sandbox, packs, relics), give
+coins/goods/rare materials, fill the tray with specific catches, trigger story letters,
+customers and decorations, toggle fast dredging, or retire instantly. It never appears in a
+release export (`OS.is_debug_build()` is false there), so it won't ship on Steam.
+
 ## What's in
 
-Dredge timer, drag-and-drop sorting into 6 bins with a streak multiplier, Inspect hints, a cooler for fish and a click-to-dress Cutting Board, hidden requirements that unlock stations in order, crow letters delivered to the Desk, a town of people who each buy different goods (starting with Walt at the diner and Dot at the salvage yard), fish that change with depth, the Emporium (decorations with permanent payout bonuses, a drinks-and-meals counter, a lights-out puzzle bench, an arcade with a prize counter, and a no-deadline work order board), prestige cosmetics (keychains, pets, profile borders, chat badges), a sound settings menu, curio cleaning and rarity, Collector's Log, magic curios (permanent buffs, full-set bonus), crates, bottles (Lore Letters, community letters with voting, empty bottles), animals to set free, stations (Cutting Board, Oven, Crucible, Carpentry Bench, Recycling Machine), storage and selling, Work Table upgrades, Map depths, prestige with titles, letter-writing warning and rules, max 3 letters awaiting review.
+Dredge timer, drag-and-drop sorting into 6 bins with a streak multiplier, Inspect hints, a cooler for fish and a click-to-dress Cutting Board, hidden requirements that unlock stations in order, crow letters delivered to the Desk, a town of people who each buy different goods (starting with Walt at the diner and Dot at the salvage yard), fish that change with depth, the Emporium (decorations with permanent payout bonuses, a drinks-and-meals counter, a lights-out puzzle bench, an arcade with a prize counter, and a no-deadline work order board), prestige that opens deeper water, then themed packs (The Lighthouse, The Sunken Carnival, The Night Ferry), then rarer relic curios; counter customers drawn from townsfolk, locals, travellers, tourists and event visitors; prestige cosmetics (keychains, pets, profile borders, chat badges), a sound settings menu, curio cleaning and rarity, Collector's Log, magic curios (permanent buffs, full-set bonus), crates, bottles (Lore Letters, community letters with voting, empty bottles), animals to set free, stations (Cutting Board, Oven, Crucible, Carpentry Bench, Recycling Machine), storage and selling, Work Table upgrades, Map depths, prestige with titles, letter-writing warning and rules, max 3 letters awaiting review.
 
 ## Not yet
 
