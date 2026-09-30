@@ -34,6 +34,7 @@ func _process(_delta: float) -> void:
 		s.sel = -1
 		_commit()
 		hauled.emit()
+	_customer_tick()
 
 
 func _notification(what: int) -> void:
@@ -89,6 +90,19 @@ func _persistent() -> Dictionary:
 		"orders": {},  # standing orders filled, per person; they grow with each one
 		"rares": {},  # materials that can't be dredged
 		"emporium": false,  # once opened, it stays yours through prestige
+		# Emporium state, also kept through prestige.
+		"emp_tab": "floor",
+		"decor": [],  # {id, n, e, rar, placed}
+		"slots": Data.DECOR_START_SLOTS,
+		"tickets": 0,
+		"puzzles": [],  # stowed puzzle curios, by rarity
+		"puzzle": {},  # the one on the workbench: {n, cells, rar}
+		"customers": [],
+		"next_customer": 0.0,
+		"board": [],
+		"board_done": 0,
+		# Prestige cosmetics on show; -1 = none.
+		"looks": {"keychain": -1, "pet": -1, "border": -1, "badge": -1},
 	}
 
 
@@ -136,6 +150,14 @@ func _load() -> void:
 		s.orders[k] = int(s.orders[k])
 	for k in s.rares:
 		s.rares[k] = int(s.rares[k])
+	for k in ["slots", "tickets", "board_done"]:
+		s[k] = int(s[k])
+	for k in s.looks:
+		s.looks[k] = int(s.looks[k])
+	for o in s.board:
+		o.n = int(o.n)
+	for c in s.customers:
+		c.drink = c.drink.map(func(x): return int(x))
 	s.dressed = int(s.dressed)
 	for k in s.since:
 		s.since[k] = int(s.since[k])
@@ -175,6 +197,7 @@ func g_mult() -> float:
 	bonus += 0.05 if has_magic("pearl") else 0.0
 	bonus += 0.1 if has_magic("heart") else 0.0
 	bonus += 0.25 if complete() else 0.0
+	bonus += decor_bonus()
 	return (1.0 + 0.1 * s.prestige) * Data.DEPTHS[s.depth].m * bonus
 
 
@@ -235,6 +258,8 @@ func tab_unlocked(t: String) -> bool:
 			return false  # needs the online server
 		"town":
 			return s.story.has("crow1_read")
+		"emporium":
+			return s.emporium
 	return true
 
 
@@ -347,6 +372,10 @@ func _haul() -> Array:
 					"clicks": 0,
 					"done": false,
 				}
+			)
+		elif s.emporium and randf() < Data.PUZZLE_CHANCE:
+			out.append(
+				{"uid": _next_uid(), "kind": "puzzle", "name": "Puzzle curio", "e": "🧩", "rar": _roll_rarity()}
 			)
 		else:
 			out.append(_new_item(_pick_kind()))
@@ -730,6 +759,9 @@ func retire() -> void:
 	keep.prestige = s.prestige + 1
 	s = _fresh()
 	s.merge(keep, true)
+	# Show off the newest prestige rewards straight away.
+	for kind in s.looks:
+		s.looks[kind] = mini(s.prestige, Data.COSMETICS[kind].size()) - 1
 	s.tab = "work"
 	toast.emit("A new tide begins. You are now a %s." % title())
 	_commit()
@@ -857,6 +889,7 @@ func open_emporium() -> void:
 	for r in Data.EMPORIUM_RARES:
 		s.rares[r] = int(s.rares[r]) - Data.EMPORIUM_RARES[r]
 	s.emporium = true
+	board_fill()
 	toast.emit("Your Emporium is open. You can sell everything at once from Storage.")
 	_commit()
 	deliver_letter("crow_emporium")
@@ -972,3 +1005,260 @@ func complete_quest(npc: String) -> void:
 		s.quests_done[q.id] = true
 	_commit()
 	quest_done.emit(npc, q.done, ", ".join(parts))
+
+
+
+# ---------- Emporium: decorations ----------
+
+
+func _roll_rarity() -> String:
+	var roll := randf() * 100.0
+	var threshold := 0.0
+	for i in range(Data.RARITY.size() - 1, -1, -1):
+		threshold += Data.RARITY[i][2]
+		if roll < threshold:
+			return Data.RARITY[i][0]
+	return "common"
+
+
+func decor_bonus() -> float:
+	var total := 0.0
+	for d in s.decor:
+		if d.placed:
+			total += Data.DECOR_BONUS[d.rar]
+	return total
+
+
+func placed_count() -> int:
+	return s.decor.filter(func(d): return d.placed).size()
+
+
+## A new decoration. It goes straight onto the floor if there's room.
+func _grant_decor(rar: String) -> void:
+	var pick: Array = Data.DECOR[rar].pick_random()
+	var d := {"id": pick[0], "n": pick[1], "e": pick[2], "rar": rar, "placed": false}
+	d.placed = placed_count() < s.slots
+	s.decor.append(d)
+	toast.emit("New decoration: %s %s (%s)" % [d.e, d.n, rar])
+
+
+func toggle_decor(i: int) -> void:
+	var d: Dictionary = s.decor[i]
+	if not d.placed and placed_count() >= s.slots:
+		toast.emit("No room on the floor. Put something away or expand the shop.")
+		return
+	d.placed = not d.placed
+	_commit()
+
+
+func slot_cost() -> int:
+	return roundi(Data.DECOR_SLOT_BASE_COST * pow(2.0, (s.slots - Data.DECOR_START_SLOTS) / 2.0))
+
+
+func expand_slots() -> void:
+	var c := slot_cost()
+	if s.coins < c:
+		return
+	s.coins -= c
+	s.slots += 2
+	toast.emit("The Emporium has room for %d decorations now." % s.slots)
+	_commit()
+
+
+# ---------- Emporium: puzzle curios ----------
+
+
+func stow_puzzle(uid: int) -> void:
+	var it := _item(uid)
+	if it.is_empty():
+		return
+	s.puzzles.append(it.rar)
+	toast.emit("Stowed a %s puzzle curio for the Emporium." % it.rar)
+	_drop(it)
+	_commit()
+
+
+## Puzzles are "lights out": pressing a tile flips it and its neighbours. Clear them all.
+func start_puzzle() -> void:
+	if not s.puzzle.is_empty() or s.puzzles.is_empty():
+		return
+	var rar: String = s.puzzles.pop_front()
+	var n := 3 if rar == "common" or rar == "uncommon" else 4
+	var cells := []
+	cells.resize(n * n)
+	cells.fill(false)
+	s.puzzle = {"n": n, "cells": cells, "rar": rar}
+	# Scramble by pressing from the solved state, so it's always solvable.
+	while not s.puzzle.cells.has(true):
+		for i in n + 2 + _rank(rar) * 2:
+			_flip(randi() % (n * n))
+	_commit()
+
+
+func _flip(i: int) -> void:
+	var n: int = s.puzzle.n
+	var x := i % n
+	var y := i / n
+	for d in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var nx: int = x + d.x
+		var ny: int = y + d.y
+		if nx >= 0 and nx < n and ny >= 0 and ny < n:
+			s.puzzle.cells[ny * n + nx] = not s.puzzle.cells[ny * n + nx]
+
+
+func press_cell(i: int) -> void:
+	if s.puzzle.is_empty():
+		return
+	_flip(i)
+	if not s.puzzle.cells.has(true):
+		var rar: String = s.puzzle.rar
+		s.puzzle = {}
+		var coins: float = 200.0 * (1 + _rank(rar)) * g_mult()
+		_earn(coins)
+		toast.emit("The curio clicks open! %d coins inside." % roundi(coins))
+		_grant_decor(rar)
+	_commit()
+
+
+# ---------- Emporium: the counter ----------
+
+
+func _customer_tick() -> void:
+	if not s.emporium or s.customers.size() >= Data.MAX_CUSTOMERS:
+		return
+	if _now() < s.next_customer:
+		return
+	s.next_customer = _now() + Data.CUSTOMER_EVERY
+	s.customers.append(
+		{
+			"id": _next_uid(),
+			"e": Data.CUSTOMERS.pick_random(),
+			"drink": [
+				randi() % Data.DRINK_BASES.size(),
+				randi() % Data.DRINK_FLAVORS.size(),
+				randi() % Data.DRINK_FINISHES.size(),
+			],
+			"food": randf() < 0.5,
+		}
+	)
+	_commit()
+
+
+func drink_name(d: Array) -> String:
+	return "%s with %s, %s" % [
+		Data.DRINK_BASES[d[0]], Data.DRINK_FLAVORS[d[1]].to_lower(), Data.DRINK_FINISHES[d[2]].to_lower()
+	]
+
+
+## Drinks are endless; food comes out of your finite stock of meals.
+func serve(cid: int, drink: Array) -> void:
+	var c: Dictionary = {}
+	for x in s.customers:
+		if x.id == cid:
+			c = x
+	if c.is_empty():
+		return
+	var right: bool = drink == c.drink
+	var pay: float = Data.DRINK_PRICE * g_mult() * (1.5 if right else 0.4)
+	var note := "Perfect order! Big tip." if right else "Not quite what they asked for."
+	if c.food:
+		if int(holding("meal").n) > 0:
+			pay += _take("meal", 1) * 1.5
+			note += " They loved the meal."
+		else:
+			note += " They wanted food, but you're out of meals."
+	_earn(pay)
+	s.customers.erase(c)
+	toast.emit("%s +%d coins. %s" % [c.e, roundi(pay), note])
+	_commit()
+
+
+# ---------- Emporium: arcade ----------
+
+
+## score is 0..1: how close to the centre the lever stopped.
+func arcade_result(score: float) -> int:
+	var t := 1 + roundi(9.0 * score * score)
+	s.tickets += t
+	_commit()
+	return t
+
+
+func buy_prize(i: int) -> void:
+	var box: Dictionary = Data.PRIZE_BOXES[i]
+	if s.tickets < box.cost:
+		return
+	s.tickets -= box.cost
+	var odds: Dictionary = box.odds
+	var roll := randf() * 100.0
+	var rar := "common"
+	for r in odds:
+		roll -= odds[r]
+		if roll < 0.0:
+			rar = r
+			break
+	_grant_decor(rar)
+	_commit()
+
+
+# ---------- Emporium: work order board ----------
+
+
+func _board_goods() -> Array:
+	var goods := ["cooler", "fish_dressed"]
+	for k in Data.BIN_KEYS:
+		goods.append("bin_" + k)
+	for g in Data.GOOD_STATION:
+		if s.st.has(Data.GOOD_STATION[g]):
+			goods.append(g)
+	return goods
+
+
+## Keeps the board topped up. Orders never expire.
+func board_fill() -> void:
+	while s.board.size() < Data.BOARD_SIZE:
+		var good: String = _board_goods().pick_random()
+		var n := roundi(randf_range(10, 30) * (1.0 + 0.1 * mini(s.board_done, 30)))
+		s.board.append({"good": good, "n": n, "decor": randf() < 0.3})
+
+
+func complete_board(i: int) -> void:
+	var o: Dictionary = s.board[i]
+	if int(holding(o.good).n) < int(o.n):
+		return
+	var pay: float = _take(o.good, o.n) * 2.0
+	_earn(pay)
+	toast.emit("Work order filled: +%d coins" % roundi(pay))
+	if o.decor:
+		_grant_decor(["common", "uncommon", "rare"].pick_random())
+	s.board.remove_at(i)
+	s.board_done += 1
+	board_fill()
+	_commit()
+
+
+func set_emp_tab(t: String) -> void:
+	s.emp_tab = t
+	_commit()
+
+
+# ---------- prestige cosmetics ----------
+
+
+## How many of each cosmetic are unlocked (one per retirement).
+func looks_unlocked(kind: String) -> int:
+	return mini(s.prestige, Data.COSMETICS[kind].size())
+
+
+func set_look(kind: String, i: int) -> void:
+	if i < looks_unlocked(kind):
+		s.looks[kind] = i
+		_commit()
+
+
+## The equipped cosmetic as [name, value], or [] if none.
+func look(kind: String) -> Array:
+	var i: int = s.looks[kind]
+	if i < 0 or i >= looks_unlocked(kind):
+		return []
+	return Data.COSMETICS[kind][i]

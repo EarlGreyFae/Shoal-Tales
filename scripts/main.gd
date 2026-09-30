@@ -26,6 +26,7 @@ const TABS := [
 	["craft", "🔨 Stations"],
 	["desk", "🗒️ Desk"],
 	["town", "🏘️ Town"],
+	["emporium", "🏬 Emporium"],
 	["work", "🛠️ Work Table"],
 	["map", "🗺️ Map"],
 	["guild", "🤝 Guild"],
@@ -38,6 +39,7 @@ const DESK_TABS := [
 	["log", "Collector's Log"],
 	["magic", "Magic Curios"],
 	["tos", "Rules"],
+	["profile", "Profile"],
 ]
 
 const RULES := [
@@ -59,6 +61,11 @@ var pending_impact := {}
 var pending_pop := false
 var shown_coins := 0.0
 var inspect_uid := -1
+var drink_sel := [0, 0, 0]
+var arcade_marker: Control
+var arcade_button: Button
+var arcade_running := false
+var arcade_t := 0.0
 var known_tabs := []
 var toasts: VBoxContainer
 var modal: Control
@@ -91,6 +98,10 @@ func _ready() -> void:
 		var l := _label("", 16)
 		header.add_child(l)
 		header_labels[k] = l
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = SIZE_EXPAND_FILL
+	header.add_child(spacer)
+	header.add_child(_button("⚙️ Sound", _show_settings))
 
 	var tab_margin := _margin(16, 10)
 	root.add_child(tab_margin)
@@ -147,6 +158,10 @@ func _process(delta: float) -> void:
 	if absf(target - shown_coins) < 0.5:
 		shown_coins = target
 	header_labels.coins.text = "💰 %d" % roundi(shown_coins)
+	if arcade_running and is_instance_valid(arcade_marker):
+		arcade_t += delta
+		var bar: Control = arcade_marker.get_parent()
+		arcade_marker.position.x = _arcade_pos() * (bar.size.x - arcade_marker.size.x)
 
 
 # ---------- building blocks ----------
@@ -260,7 +275,11 @@ func refresh() -> void:
 	header_labels.streak.text = "🔥 Sort streak %d" % s.streak
 	header_labels.mult.text = "✨ Payout ×%.2f" % (Game.g_mult() * Game.streak_mult())
 	var stars: String = "  ★%d · Sandbox" % s.prestige if s.prestige > 0 else ""
-	header_labels.title.text = "🏅 " + Game.title() + stars
+	var badge: Array = Game.look("badge")
+	var pet: Array = Game.look("pet")
+	header_labels.title.text = (
+		(badge[1] if badge else "🏅") + " " + Game.title() + stars + ("   " + pet[1] if pet else "")
+	)
 
 	var open_tabs := TABS.filter(func(t): return Game.tab_unlocked(t[0]))
 	var first := known_tabs.is_empty()
@@ -308,6 +327,8 @@ func refresh() -> void:
 			_page_map()
 		"town":
 			_page_town()
+		"emporium":
+			_page_emporium()
 		"guild":
 			_page_guild()
 
@@ -317,7 +338,14 @@ func refresh() -> void:
 
 func _page_dredge() -> void:
 	var s: Dictionary = Game.s
-	var v := _card("%s  ·  basket holds %d/%d" % [Data.DEPTHS[s.depth].n, Game.basket(), Data.MAX_BASKET])
+	var keychain: Array = Game.look("keychain")
+	var v := _card(
+		"%s  ·  basket holds %d/%d%s"
+		% [
+			Data.DEPTHS[s.depth].n, Game.basket(), Data.MAX_BASKET,
+			("   " + keychain[1] + " " + keychain[0]) if keychain else ""
+		]
+	)
 	var busy: bool = Game.dredging()
 	var has_catch: bool = not s.tray.is_empty()
 	var txt: String = "Dredging…" if busy else ("Sort your catch first" if has_catch else "Drop the dredge")
@@ -526,6 +554,10 @@ func _item_card(it: Dictionary) -> Control:
 			actions.append(["Open", Game.open_crate.bind(uid), "drop_wood"])
 		"bottle":
 			actions.append(["Open", Game.open_bottle.bind(uid), "pickup"])
+		"puzzle":
+			sub = "%s puzzle curio" % it.rar
+			sub_color = RAR_COLORS[it.rar]
+			actions.append(["Stow for the Emporium", Game.stow_puzzle.bind(uid), "pickup"])
 		"animal":
 			sub = "tangled in the net"
 			actions.append(["Set free", Game.free_animal.bind(uid), "splash"])
@@ -667,6 +699,8 @@ func _page_desk() -> void:
 			_desk_magic()
 		"tos":
 			_desk_rules()
+		"profile":
+			_desk_profile()
 
 
 func _desk_crow() -> void:
@@ -1119,3 +1153,315 @@ func _update_counter(te: TextEdit, counter: Label) -> void:
 func _send_letter(te: TextEdit, sign_box: CheckBox) -> void:
 	if Game.send_letter(te.text, sign_box.button_pressed):
 		_close_modal()
+
+
+
+# ---------- settings ----------
+
+
+func _show_settings() -> void:
+	var v := _open_modal()
+	v.add_child(_label("⚙️ Sound", 20, C_PAPER_INK))
+	for row in [["Master volume", Sfx.master, Sfx.set_master], ["Sound effects", Sfx.effects, Sfx.set_effects]]:
+		var r := _row(v)
+		var l := _label(row[0], 16, C_PAPER_INK)
+		l.custom_minimum_size.x = 160
+		r.add_child(l)
+		var slider := HSlider.new()
+		slider.min_value = 0.0
+		slider.max_value = 150.0
+		slider.step = 5.0
+		slider.value = row[1] * 100.0
+		slider.size_flags_horizontal = SIZE_EXPAND_FILL
+		slider.custom_minimum_size.x = 260
+		r.add_child(slider)
+		var pct := _label("%d%%" % roundi(slider.value), 16, C_PAPER_INK)
+		pct.custom_minimum_size.x = 56
+		r.add_child(pct)
+		slider.value_changed.connect(_on_volume.bind(row[2], pct))
+	v.add_child(_para("100% is the normal level. Changes are saved automatically.", C_PAPER_INK, 14))
+	var r2 := _row(v)
+	r2.add_child(_button("Test sound", Sfx.play.bind("drop_metal")))
+	r2.add_child(_button("Done", _close_modal))
+
+
+func _on_volume(value: float, setter: Callable, pct: Label) -> void:
+	setter.call(value / 100.0)
+	pct.text = "%d%%" % roundi(value)
+
+
+# ---------- Emporium ----------
+
+const EMP_TABS := [
+	["floor", "🪴 Shop floor"],
+	["counter", "☕ Counter"],
+	["puzzles", "🧩 Puzzle bench"],
+	["arcade", "🕹️ Arcade"],
+	["board", "📌 Work orders"],
+]
+
+
+func _page_emporium() -> void:
+	var s: Dictionary = Game.s
+	var tabs := _row(_card())
+	for t in EMP_TABS:
+		var b := _button(t[1], Game.set_emp_tab.bind(t[0]))
+		if s.emp_tab == t[0]:
+			b.add_theme_stylebox_override("normal", _box(C_PANEL2, C_ACCENT, 8, 2, 8))
+		tabs.add_child(b)
+	arcade_marker = null
+	match s.emp_tab:
+		"floor":
+			_emp_floor()
+		"counter":
+			_emp_counter()
+		"puzzles":
+			_emp_puzzles()
+		"arcade":
+			_emp_arcade()
+		"board":
+			_emp_board()
+
+
+func _emp_floor() -> void:
+	var s: Dictionary = Game.s
+	var v := _card("🪴 Shop floor — %d/%d spots used" % [Game.placed_count(), s.slots])
+	var pet: Array = Game.look("pet")
+	if pet:
+		v.add_child(_para("%s Your %s is napping by the door." % [pet[1], pet[0].to_lower()], C_DIM))
+	v.add_child(
+		_para(
+			"Every decoration on the floor raises all your payouts, forever: +%.1f%% right now. Rarer pieces give more."
+			% (Game.decor_bonus() * 100.0),
+			C_GOOD
+		)
+	)
+	if s.decor.is_empty():
+		v.add_child(
+			_para("Nothing yet. Decorations come from puzzle curios, the arcade and work orders.", C_DIM)
+		)
+	var g := _grid(v, 3)
+	for i in s.decor.size():
+		var d: Dictionary = s.decor[i]
+		var dv := _card("", g, C_PANEL2)
+		dv.custom_minimum_size.x = 260
+		dv.add_child(_label("%s %s" % [d.e, d.n]))
+		dv.add_child(
+			_label("%s · +%.1f%%" % [d.rar, Data.DECOR_BONUS[d.rar] * 100.0], 14, RAR_COLORS[d.rar])
+		)
+		var b := _button("Put away" if d.placed else "Place on floor", Game.toggle_decor.bind(i), false, "drop_wood")
+		b.size_flags_horizontal = SIZE_SHRINK_BEGIN
+		dv.add_child(b)
+	var cost: int = Game.slot_cost()
+	var eb := _button("Expand the shop (+2 spots) — %dc" % cost, Game.expand_slots, s.coins < cost, "drop_metal")
+	eb.size_flags_horizontal = SIZE_SHRINK_BEGIN
+	v.add_child(eb)
+
+
+func _emp_counter() -> void:
+	var s: Dictionary = Game.s
+	var v := _card("☕ The counter")
+	v.add_child(
+		_para(
+			"Customers wander in on their own, no rush. Drinks are endless; build each one to order. Meals come from your stock (%d left)."
+			% int(Game.holding("meal").n),
+			C_DIM
+		)
+	)
+	var builder := _card("Your drink: " + Game.drink_name(drink_sel), v, C_PANEL2)
+	var rows := [Data.DRINK_BASES, Data.DRINK_FLAVORS, Data.DRINK_FINISHES]
+	for part in rows.size():
+		var r := _row(builder)
+		for opt in rows[part].size():
+			var b := _button(rows[part][opt], _pick_drink.bind(part, opt), false, "pickup")
+			if drink_sel[part] == opt:
+				b.add_theme_stylebox_override("normal", _box(C_ACCENT.darkened(0.3), C_ACCENT, 8, 2, 8))
+			r.add_child(b)
+	if s.customers.is_empty():
+		v.add_child(_para("The shop is quiet. Someone will wander in soon.", C_DIM))
+	for c in s.customers:
+		var cv := _card("", v, C_PANEL2)
+		var r := _row(cv)
+		r.add_child(_label(c.e, 36))
+		var want: String = "“A %s%s, please.”" % [
+			Game.drink_name(c.drink).to_lower(), " and something to eat" if c.food else ""
+		]
+		var wl := _para(want)
+		r.add_child(wl)
+		r.add_child(_button("Serve", Game.serve.bind(int(c.id), drink_sel.duplicate()), false, "coin"))
+
+
+func _pick_drink(part: int, opt: int) -> void:
+	drink_sel[part] = opt
+	# Deferred: this button is freed by the redraw.
+	refresh.call_deferred()
+
+
+func _emp_puzzles() -> void:
+	var s: Dictionary = Game.s
+	var v := _card("🧩 Puzzle bench — %d curios waiting" % s.puzzles.size())
+	v.add_child(
+		_para(
+			"Puzzle curios turn up in your catch now and then. Each tile flips itself and its neighbours; turn every light off to open it.",
+			C_DIM
+		)
+	)
+	if s.puzzle.is_empty():
+		var b := _button("Take one to the bench", Game.start_puzzle, s.puzzles.is_empty(), "pickup")
+		b.size_flags_horizontal = SIZE_SHRINK_BEGIN
+		v.add_child(b)
+		return
+	var n: int = s.puzzle.n
+	v.add_child(_label("A %s puzzle curio" % s.puzzle.rar, 16, RAR_COLORS[s.puzzle.rar]))
+	var g := _grid(v, n)
+	for i in n * n:
+		var lit: bool = s.puzzle.cells[i]
+		var b := _button("✦" if lit else "", Game.press_cell.bind(i), false, "scrub")
+		b.custom_minimum_size = Vector2(64, 64)
+		b.add_theme_stylebox_override(
+			"normal", _box(C_ACCENT if lit else C_HEADER, C_ACCENT if lit else C_LINE, 8, 2, 4)
+		)
+		g.add_child(b)
+
+
+func _emp_arcade() -> void:
+	var s: Dictionary = Game.s
+	var v := _card("🕹️ Tide Timer — %d tickets" % s.tickets)
+	v.add_child(
+		_para("Pull the lever, then stop the float as close to the middle as you can. Free to play.", C_DIM)
+	)
+	var bar := Panel.new()
+	bar.custom_minimum_size = Vector2(480, 40)
+	bar.size_flags_horizontal = SIZE_SHRINK_BEGIN
+	bar.add_theme_stylebox_override("panel", _box(C_HEADER, C_LINE, 8, 1, 0))
+	v.add_child(bar)
+	var zone := ColorRect.new()
+	zone.color = Color(C_GOOD, 0.35)
+	zone.position = Vector2(480 * 0.45, 0)
+	zone.size = Vector2(480 * 0.1, 40)
+	bar.add_child(zone)
+	arcade_marker = ColorRect.new()
+	arcade_marker.color = C_ACCENT
+	arcade_marker.size = Vector2(8, 40)
+	arcade_marker.position.x = _arcade_pos() * (480 - 8)
+	bar.add_child(arcade_marker)
+	arcade_button = _button("Stop!" if arcade_running else "Pull the lever", _arcade_press)
+	arcade_button.size_flags_horizontal = SIZE_SHRINK_BEGIN
+	v.add_child(arcade_button)
+
+	var pc := _card("🎟️ Prize counter")
+	for i in Data.PRIZE_BOXES.size():
+		var box: Dictionary = Data.PRIZE_BOXES[i]
+		var r := _row(pc)
+		var odds: PackedStringArray = []
+		for rar in box.odds:
+			odds.append("%s %d%%" % [rar, box.odds[rar]])
+		var l := _label("%s  (%s)" % [box.n, ", ".join(odds)])
+		l.size_flags_horizontal = SIZE_EXPAND_FILL
+		r.add_child(l)
+		r.add_child(
+			_button("%d tickets" % box.cost, Game.buy_prize.bind(i), s.tickets < box.cost, "coin")
+		)
+
+
+func _arcade_pos() -> float:
+	return 0.5 + 0.5 * sin(arcade_t * 3.2)
+
+
+func _arcade_press() -> void:
+	if not arcade_running:
+		arcade_running = true
+		arcade_button.text = "Stop!"
+		Sfx.play("crank", 1.3)
+		return
+	arcade_running = false
+	var score := 1.0 - minf(1.0, absf(_arcade_pos() - 0.5) / 0.5)
+	var t: int = Game.arcade_result(score)
+	Sfx.play("coin", 0.8 + 0.4 * score)
+	show_toast("🎟️ %d tickets%s" % [t, "  — dead centre!" if score > 0.95 else ""])
+
+
+func _emp_board() -> void:
+	var s: Dictionary = Game.s
+	var v := _card("📌 Work orders")
+	v.add_child(
+		_para(
+			"No deadlines. Fill them whenever you have the goods; they pay double, and some come with a decoration.",
+			C_DIM
+		)
+	)
+	for i in s.board.size():
+		var o: Dictionary = s.board[i]
+		var have: int = int(Game.holding(o.good).n)
+		var need: int = o.n
+		var r := _row(v)
+		var l := _label(
+			"%d × %s%s  (you have %d)" % [need, Game.good_label(o.good), "  + 🎁 decoration" if o.decor else "", have]
+		)
+		l.size_flags_horizontal = SIZE_EXPAND_FILL
+		r.add_child(l)
+		r.add_child(_button("Fill order", Game.complete_board.bind(i), have < need, "coin"))
+
+
+# ---------- profile ----------
+
+const LOOK_KINDS := [
+	["keychain", "Basket keychain"],
+	["pet", "Pet"],
+	["border", "Profile border"],
+	["badge", "Chat badge"],
+]
+
+
+func _desk_profile() -> void:
+	var s: Dictionary = Game.s
+	var border: Array = Game.look("border")
+	var frame := PanelContainer.new()
+	frame.add_theme_stylebox_override(
+		"panel", _box(C_PANEL2, Color(border[1]) if border else C_LINE, 16, 5 if border else 1, 14)
+	)
+	frame.size_flags_horizontal = SIZE_SHRINK_BEGIN
+	content.add_child(frame)
+	var fr := _row(frame)
+	fr.add_theme_constant_override("separation", 16)
+	var pet: Array = Game.look("pet")
+	fr.add_child(_label("🧑‍✈️", 56))
+	var col := VBoxContainer.new()
+	var badge: Array = Game.look("badge")
+	col.add_child(_label(((badge[1] + " ") if badge else "") + Game.title(), 22, C_ACCENT))
+	col.add_child(_label("Prestige %d%s" % [s.prestige, " · Sandbox" if s.prestige > 0 else ""], 15, C_DIM))
+	if pet:
+		col.add_child(_label("%s %s" % [pet[1], pet[0]], 15))
+	fr.add_child(col)
+
+	var v := _card("Prestige rewards")
+	v.add_child(
+		_para(
+			"Each retirement unlocks a new title, keychain, pet, border and chat badge. Chat badges will show once chat exists.",
+			C_DIM
+		)
+	)
+	for kind in LOOK_KINDS:
+		v.add_child(_label(kind[1], 16, C_ACCENT))
+		var r := HFlowContainer.new()
+		r.add_theme_constant_override("h_separation", 6)
+		r.add_theme_constant_override("v_separation", 6)
+		v.add_child(r)
+		var none := _button("None", Game.set_look.bind(kind[0], -1))
+		if s.looks[kind[0]] == -1:
+			none.add_theme_stylebox_override("normal", _box(C_PANEL2, C_ACCENT, 8, 2, 8))
+		r.add_child(none)
+		var items: Array = Data.COSMETICS[kind[0]]
+		for i in items.size():
+			var unlocked: bool = i < Game.looks_unlocked(kind[0])
+			var shown: String = items[i][1] if kind[0] != "border" else "▢"
+			var b := _button(
+				("%s %s" % [shown, items[i][0]]) if unlocked else "🔒 Prestige %d" % (i + 1),
+				Game.set_look.bind(kind[0], i),
+				not unlocked
+			)
+			if unlocked and s.looks[kind[0]] == i:
+				b.add_theme_stylebox_override("normal", _box(C_PANEL2, C_ACCENT, 8, 2, 8))
+			if kind[0] == "border" and unlocked:
+				b.add_theme_color_override("font_color", Color(items[i][1]))
+			r.add_child(b)

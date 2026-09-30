@@ -470,3 +470,96 @@ const SEED_COMMUNITY := [
 const TITLES := [
 	"New in Town", "Weekend Dredger", "Salvager", "Local Regular", "Shore Warden", "Town Legend"
 ]
+
+# ---------- Emporium ----------
+
+# Decorations: each one placed in the Emporium adds its bonus to every payout, forever.
+# [id, name, emoji]
+const DECOR_BONUS := {"common": 0.005, "uncommon": 0.01, "rare": 0.025, "epic": 0.05}
+const DECOR := {
+	"common": [
+		["fern", "Potted fern", "🪴"],
+		["net", "Fishing-net drape", "🕸️"],
+		["chalk", "Chalkboard menu", "📋"],
+		["lights", "String lights", "💡"],
+		["float", "Glass fishing float", "🔮"],
+	],
+	"uncommon": [
+		["wheel", "Ship's wheel", "☸️"],
+		["porthole", "Brass porthole mirror", "🪞"],
+		["jukebox", "Jukebox", "📻"],
+		["buoy", "Painted buoy", "🛟"],
+	],
+	"rare": [
+		["marlin", "Mounted marlin", "🐟"],
+		["helmet", "Antique diving helmet", "🤿"],
+		["lamp", "Stained glass lamp", "🏮"],
+	],
+	"epic": [
+		["lens", "Lighthouse lens", "🔆"],
+		["perch", "Zephyr's perch", "🪶"],
+		["boat", "Model of Crow's boat", "⛵"],
+	],
+}
+const DECOR_START_SLOTS := 6
+const DECOR_SLOT_BASE_COST := 50000  # doubles with each expansion
+
+# Puzzle curios turn up in the catch once the Emporium is open.
+const PUZZLE_CHANCE := 0.03
+
+# Drinks are endless and built to order: base + flavor + finish.
+const DRINK_BASES := ["Coffee", "Tea", "Lemonade", "Soda water"]
+const DRINK_FLAVORS := ["Vanilla", "Mint", "Berry", "Caramel"]
+const DRINK_FINISHES := ["Ice", "Whipped cream", "Lemon slice", "Straight up"]
+const DRINK_PRICE := 40.0
+const CUSTOMER_EVERY := 25.0  # seconds between walk-ins
+const MAX_CUSTOMERS := 3
+const CUSTOMERS := ["🧑", "👩", "👨", "🧓", "👵", "🧒", "🧑‍🦰", "👩‍🦳", "🧔"]
+
+# Arcade: tickets buy decoration boxes at the prize counter.
+const PRIZE_BOXES := [
+	{"n": "Paper prize bag", "cost": 30, "odds": {"common": 85, "uncommon": 15}},
+	{"n": "Wooden prize box", "cost": 90, "odds": {"common": 40, "uncommon": 45, "rare": 15}},
+	{"n": "Gilded prize chest", "cost": 250, "odds": {"uncommon": 40, "rare": 45, "epic": 15}},
+]
+
+# Work order board: no timers. Up to this many open at once.
+const BOARD_SIZE := 3
+
+# ---------- Prestige cosmetics ----------
+
+# Each retirement unlocks one of each. Pick which to show under Desk → Profile.
+const COSMETICS := {
+	"keychain": [
+		["Rusty anchor keychain", "⚓"],
+		["Sea glass keychain", "🫧"],
+		["Tiny brass bell", "🔔"],
+		["Lighthouse charm", "🗼"],
+		["Crow feather", "🪶"],
+		["Golden fish", "🐠"],
+	],
+	"pet": [
+		["Hermit crab", "🦀"],
+		["Ship's cat", "🐈"],
+		["Harbor seal", "🦭"],
+		["Pelican", "🐦"],
+		["Otter", "🦦"],
+		["Zephyr's cousin", "🐦‍⬛"],
+	],
+	"border": [
+		["Driftwood", "8a6a45"],
+		["Sea glass", "7fd1c7"],
+		["Brass", "c9a34a"],
+		["Coral", "ff7f6b"],
+		["Deep trench", "3b4fd1"],
+		["Lighthouse gold", "ffd166"],
+	],
+	"badge": [
+		["Deckhand", "⚓"],
+		["Sorter", "♻️"],
+		["Chef", "🍳"],
+		["Collector", "🏺"],
+		["Keeper", "🗝️"],
+		["Legend", "🌟"],
+	],
+}
