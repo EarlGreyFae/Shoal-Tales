@@ -217,18 +217,18 @@ const STATIONS := {
 	},
 	"carpentry": {
 		"n": "Carpentry Bench", "e": "🪓", "cost": 15000,
-		"d": "Turns the wood bin into knick-knacks.",
+		"d": "Turns stored wooden junk into knick-knacks.",
 		"needs": {"stat": "wood", "count": 150},
 		"tease": "The wood bin is filling up. It seems a shame to just sell good lumber.",
 	},
 	"crucible": {
-		"n": "Crucible", "e": "🌋", "cost": 25000, "d": "Melts the metal bin into ingots.",
+		"n": "Crucible", "e": "🌋", "cost": 25000, "d": "Melts stored metal junk into ingots.",
 		"needs": {"stat": "metal", "count": 200},
 		"tease": "All that scrap metal. If only you had a way to melt it down.",
 	},
 	"recycler": {
 		"n": "Recycling Machine", "e": "♻️", "cost": 40000,
-		"d": "Breaks the mixed bin into base materials.",
+		"d": "Breaks stored mixed junk down into base materials.",
 		"needs": {"stat": "mixed", "count": 200},
 		"tease": "The mixed bin is the one nobody wants. There must be something useful in there.",
 	},
@@ -246,6 +246,10 @@ const GOODS := {
 # Dressing a fish on the Cutting Board multiplies its value by this.
 const DRESS_MULT := 1.6
 
+# Junk can be stored whole (instead of sorted) once the station for its material is on board.
+# Stations process stored junk ("stored_<bin>" inputs); sorted goods are only for selling to Dot.
+const BIN_STATION := {"metal": "crucible", "wood": "carpentry", "mixed": "recycler"}
+
 # Stations that process a whole stock at once. (The Cutting Board is hands-on and separate.)
 const RECIPES := [
 	{
@@ -253,16 +257,16 @@ const RECIPES := [
 		"f": 2.2, "d": "Cook dressed fish into meals.",
 	},
 	{
-		"st": "crucible", "n": "Crucible", "e": "🌋", "inp": "bin_metal", "out": "ingot",
-		"f": 2.5, "d": "Melt metal into ingots.",
+		"st": "crucible", "n": "Crucible", "e": "🌋", "inp": "stored_metal", "out": "ingot",
+		"f": 2.5, "d": "Melt stored metal junk into ingots.",
 	},
 	{
-		"st": "carpentry", "n": "Carpentry Bench", "e": "🪓", "inp": "bin_wood", "out": "knick",
-		"f": 2.2, "d": "Build knick-knacks from wood.",
+		"st": "carpentry", "n": "Carpentry Bench", "e": "🪓", "inp": "stored_wood", "out": "knick",
+		"f": 2.2, "d": "Build knick-knacks from stored wooden junk.",
 	},
 	{
-		"st": "recycler", "n": "Recycling Machine", "e": "♻️", "inp": "bin_mixed", "out": "material",
-		"f": 3.0, "d": "Reduce mixed trash to materials.",
+		"st": "recycler", "n": "Recycling Machine", "e": "♻️", "inp": "stored_mixed", "out": "material",
+		"f": 3.0, "d": "Break stored mixed junk down into base materials.",
 	},
 ]
 

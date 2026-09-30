@@ -554,6 +554,8 @@ func _item_card(it: Dictionary) -> Control:
 		"junk":
 			sub = "in hand — pick a bin" if selected else "drag to a bin"
 			actions.append(["🔍 Inspect", _inspect.bind(uid), "pickup"])
+			if Game.can_store(it):
+				actions.append(["📦 Store", Game.store_item.bind(uid), "drop_wood"])
 			if it.name == "Empty bottle":
 				actions.append(["Keep", Game.empty_keep.bind(uid), "pickup"])
 		"fish":
@@ -592,7 +594,7 @@ func _item_card(it: Dictionary) -> Control:
 func _goods_name(g: String) -> String:
 	if g.begins_with("bin_"):
 		var bin: Dictionary = Data.BINS[g.substr(4)]
-		return "%s %s bin" % [bin.e, bin.n]
+		return "%s Sorted %s" % [bin.e, bin.n.to_lower()]
 	var info: Array = Game.goods_info(g)
 	return "%s %s" % [info[1], info[0]]
 
@@ -613,12 +615,24 @@ func _page_storage() -> void:
 		name_l.size_flags_horizontal = SIZE_EXPAND_FILL
 		r.add_child(name_l)
 		r.add_child(_label("%dc" % roundi(o.v)))
+	for bin in Data.BIN_STATION:
+		var items: Array = Game.stored_for(bin)
+		if items.is_empty():
+			continue
+		var st: Dictionary = Data.STATIONS[Data.BIN_STATION[bin]]
+		var names: PackedStringArray = []
+		for it in items:
+			names.append(it.e)
+		var sl := _label("📦 Stored for the %s ×%d:  %s" % [st.n, items.size(), " ".join(names)])
+		sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sl.size_flags_horizontal = SIZE_EXPAND_FILL
+		v.add_child(sl)
 	for r in s.rares:
 		if int(s.rares[r]) > 0:
 			var rl := _label("%s %s ×%d  (rare)" % [Data.RARES[r].e, Data.RARES[r].n, s.rares[r]])
 			rl.add_theme_color_override("font_color", RAR_COLORS.rare)
 			v.add_child(rl)
-	if s.goods.is_empty() and s.cooler.is_empty():
+	if s.goods.is_empty() and s.cooler.is_empty() and s.stored.is_empty():
 		v.add_child(_para("Nothing stored. Sort some junk and cool some fish first.", C_DIM))
 	elif s.emporium:
 		v.add_child(HSeparator.new())
@@ -660,8 +674,29 @@ func _page_craft() -> void:
 		var v := _card("%s %s" % [r.e, r.n])
 		v.add_child(_para(r.d))
 		var inp: String = r.inp
+		if inp.begins_with("stored_"):
+			# Stored junk: process item by item, or everything at once.
+			var items: Array = Game.stored_for(inp.substr(7))
+			if items.is_empty():
+				v.add_child(
+					_para("Nothing stored for this station. Use 📦 Store on junk in your catch.", C_DIM)
+				)
+				continue
+			v.add_child(_para("Click an item to process it (output value ×%.1f):" % r.f, C_DIM))
+			var flow := HFlowContainer.new()
+			flow.add_theme_constant_override("h_separation", 8)
+			flow.add_theme_constant_override("v_separation", 8)
+			v.add_child(flow)
+			for it in items:
+				var ib := _button("%s %s" % [it.e, it.name], Game.process_stored.bind(int(it.uid)), false, "scrub")
+				ib.custom_minimum_size = Vector2(150, 48)
+				flow.add_child(ib)
+			var all_b := _button("Process all %d" % items.size(), Game.process_recipe.bind(i), false, "scrub")
+			all_b.size_flags_horizontal = SIZE_SHRINK_BEGIN
+			v.add_child(all_b)
+			continue
 		var inp_name: String = (
-			Data.BINS[inp.substr(4)].n + " bin" if inp.begins_with("bin_") else Game.goods_info(inp)[0]
+			"Sorted " + Data.BINS[inp.substr(4)].n.to_lower() if inp.begins_with("bin_") else Game.goods_info(inp)[0]
 		)
 		var have: bool = s.goods.has(inp)
 		var amount: String = "%d units" % s.goods[inp].n if have else "none"

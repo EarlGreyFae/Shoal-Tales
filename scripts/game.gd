@@ -68,6 +68,7 @@ func _fresh() -> Dictionary:
 		"uid": 1,
 		"hauls": 0,
 		"cooler": [],  # raw fish waiting for the Cutting Board
+		"stored": [],  # whole junk kept for a station: {uid, name, e, bin, w, v}
 		"dressed": 0,
 		"since": {},  # handled since the last station install; drives hidden station unlocks
 		"town_sel": "",
@@ -148,6 +149,9 @@ func _load() -> void:
 			it.merge(_empty_bottle(), true)
 	for it in s.cooler:
 		it.uid = int(it.uid)
+	for it in s.stored:
+		it.uid = int(it.uid)
+		it.w = int(it.w)
 	for k in s.orders:
 		s.orders[k] = int(s.orders[k])
 	for k in s.rares:
@@ -466,7 +470,8 @@ func sort_item(uid: int, bin: String) -> void:
 		amount = it.base * 0.4 * g_mult()
 		s.streak = 0
 		toast.emit("%s belongs in %s. Streak reset." % [it.name, Data.BINS[right].n])
-	_add("bin_" + bin, 1, amount)
+	# Sorting breaks the item down for good: heavier things give more sorted units.
+	_add("bin_" + bin, sort_units(it), amount)
 	_drop(it)
 	_commit()
 	sorted.emit(bin, bin == right, int(it.get("w", 2)), amount)
@@ -683,7 +688,18 @@ func has_station(st: String) -> bool:
 
 func process_recipe(i: int) -> void:
 	var r: Dictionary = all_recipes()[i]
-	if not has_station(r.st) or not s.goods.has(r.inp):
+	if not has_station(r.st):
+		return
+	if r.inp.begins_with("stored_"):
+		var items := stored_for(r.inp.substr(7))
+		if items.is_empty():
+			return
+		for it in items:
+			_process_stored(it, r)
+		toast.emit("Processed %d stored items into %s" % [items.size(), goods_info(r.out)[0]])
+		_commit()
+		return
+	if not s.goods.has(r.inp):
 		return
 	var o: Dictionary = s.goods[r.inp]
 	_add(r.out, o.n, o.v * r.f)
@@ -875,6 +891,12 @@ func meet(id: String) -> void:
 func holding(good: String) -> Dictionary:
 	if good == "cooler":
 		return {"n": s.cooler.size(), "v": cooler_value()}
+	if good.begins_with("stored_"):
+		var items := stored_for(good.substr(7))
+		var v := 0.0
+		for it in items:
+			v += it.v
+		return {"n": items.size(), "v": v}
 	return s.goods.get(good, {"n": 0, "v": 0.0})
 
 
@@ -1471,6 +1493,14 @@ func dev_give_goods(n: int) -> void:
 	for i in n:
 		var f: Array = fish_pool(s.depth).pick_random()
 		s.cooler.append({"uid": _next_uid(), "name": f[0], "e": f[1], "v": f[2] * g_mult()})
+	for bin in Data.BIN_STATION:
+		if s.st.has(Data.BIN_STATION[bin]):
+			var pool: Array = junk_pool().filter(func(j): return j[2] == bin)
+			for i in maxi(1, n / 4):
+				var j: Array = pool.pick_random()
+				s.stored.append(
+					{"uid": _next_uid(), "name": j[0], "e": j[1], "bin": bin, "w": j[3], "v": Data.BINS[bin].p * 1.25}
+				)
 	toast.emit("Dev: +%d of every good" % n)
 	_commit()
 
@@ -1627,3 +1657,63 @@ func dev_preset(preset: String) -> void:
 	dev_give_goods(40)
 	toast.emit("Dev: prestige %d, basket 32, all stations" % s.prestige)
 	_commit()
+
+
+
+# ---------- storing whole junk for stations ----------
+
+
+## How many sorted units an item breaks down into: heavier things give more.
+func sort_units(it: Dictionary) -> int:
+	return 1 + int(it.get("w", 1))
+
+
+## Junk can be stored whole once the station for its (current) material is on board.
+func can_store(it: Dictionary) -> bool:
+	if it.get("kind", "") != "junk":
+		return false
+	var bin := correct_bin(it)
+	return Data.BIN_STATION.has(bin) and s.st.has(Data.BIN_STATION[bin])
+
+
+func store_item(uid: int) -> void:
+	var it := _item(uid)
+	if it.is_empty() or not can_store(it):
+		return
+	s.stored.append(
+		{
+			"uid": it.uid, "name": it.name, "e": it.e, "bin": correct_bin(it),
+			"w": int(it.get("w", 1)), "v": it.base * g_mult(),
+		}
+	)
+	toast.emit("Stored the %s for the %s." % [it.name, Data.STATIONS[Data.BIN_STATION[correct_bin(it)]].n])
+	_drop(it)
+	_commit()
+
+
+func stored_for(bin: String) -> Array:
+	return s.stored.filter(func(x): return x.bin == bin)
+
+
+func _recipe_for_stored(bin: String) -> Dictionary:
+	for r in all_recipes():
+		if r.inp == "stored_" + bin:
+			return r
+	return {}
+
+
+func _process_stored(it: Dictionary, r: Dictionary) -> void:
+	_add(r.out, sort_units(it), it.v * r.f)
+	s.stored.erase(it)
+
+
+## Process one stored item at its station.
+func process_stored(uid: int) -> void:
+	for it in s.stored:
+		if it.uid == uid:
+			var r := _recipe_for_stored(it.bin)
+			if r.is_empty() or not has_station(r.st):
+				return
+			_process_stored(it, r)
+			_commit()
+			return
