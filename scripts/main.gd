@@ -151,8 +151,14 @@ func _ready() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	# Hidden dev menu. OS.is_debug_build() is false in release exports (the Steam build).
+	# The ` key (left of 1), or Ctrl+Shift+D on keyboards without it. Function keys are avoided
+	# because the Godot editor uses them to run, pause and stop the game.
 	var key := event as InputEventKey
-	if key and key.pressed and not key.echo and key.keycode == KEY_F9 and OS.is_debug_build():
+	if not key or not key.pressed or key.echo or not OS.is_debug_build():
+		return
+	var backtick := key.physical_keycode == KEY_QUOTELEFT
+	var ctrl_shift_d := key.keycode == KEY_D and key.ctrl_pressed and key.shift_pressed
+	if backtick or ctrl_shift_d:
 		if is_instance_valid(modal):
 			_close_modal()
 		else:
@@ -1513,7 +1519,7 @@ func _desk_profile() -> void:
 
 func _show_dev() -> void:
 	var v := _open_modal()
-	v.add_child(_label("🛠️ Dev menu (F9)  ·  debug builds only", 18, C_PAPER_INK))
+	v.add_child(_label("🛠️ Dev menu (` or Ctrl+Shift+D)  ·  debug builds only", 18, C_PAPER_INK))
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(720, 520)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED

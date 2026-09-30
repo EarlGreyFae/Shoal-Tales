@@ -25,7 +25,7 @@ Saves go to Godot's user folder (`%APPDATA%\Godot\app_userdata\Shoal Tales` on W
 
 ## Dev menu
 
-Press **F9** while running from the Godot editor to open a hidden developer menu: jump to any
+Press the **`** key (left of 1) or **Ctrl+Shift+D** while running from the Godot editor to open a hidden developer menu: jump to any
 point in the game (town, basket 32, all stations, Emporium, sandbox, packs, relics), give
 coins/goods/rare materials, fill the tray with specific catches, trigger story letters,
 customers and decorations, toggle fast dredging, or retire instantly. It never appears in a
