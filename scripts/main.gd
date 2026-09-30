@@ -691,17 +691,22 @@ func _page_craft() -> void:
 				var ib := _button("%s %s" % [it.e, it.name], Game.process_stored.bind(int(it.uid)), false, "scrub")
 				ib.custom_minimum_size = Vector2(150, 48)
 				flow.add_child(ib)
-			var all_b := _button("Process all %d" % items.size(), Game.process_recipe.bind(i), false, "scrub")
-			all_b.size_flags_horizontal = SIZE_SHRINK_BEGIN
-			v.add_child(all_b)
 			continue
 		var inp_name: String = (
 			"Sorted " + Data.BINS[inp.substr(4)].n.to_lower() if inp.begins_with("bin_") else Game.goods_info(inp)[0]
 		)
 		var have: bool = s.goods.has(inp)
 		var amount: String = "%d units" % s.goods[inp].n if have else "none"
-		v.add_child(_para("Input: %s — %s  ·  output value ×%.1f" % [inp_name, amount, r.f], C_DIM))
-		var pb := _button("Process all", Game.process_recipe.bind(i), not have, "scrub")
+		v.add_child(
+			_para("Tap once per unit. Input: %s — %s  ·  output value ×%.1f" % [inp_name, amount, r.f], C_DIM)
+		)
+		var pb := _button(
+			"%s Make one %s" % [r.e, Game.goods_info(r.out)[0].to_lower()],
+			Game.process_recipe.bind(i),
+			not have,
+			"chop" if r.st == "oven" else "scrub"
+		)
+		pb.custom_minimum_size = Vector2(240, 52)
 		pb.size_flags_horizontal = SIZE_SHRINK_BEGIN
 		v.add_child(pb)
 

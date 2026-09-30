@@ -686,25 +686,15 @@ func has_station(st: String) -> bool:
 	return st == "cut" or s.st.has(st)
 
 
+## One tap at a station: turns a single unit of its input into its product.
+## (Stored junk is processed item by item with process_stored.) There's no "process all":
+## working the benches by hand is part of the game.
 func process_recipe(i: int) -> void:
 	var r: Dictionary = all_recipes()[i]
-	if not has_station(r.st):
+	if not has_station(r.st) or not s.goods.has(r.inp):
 		return
-	if r.inp.begins_with("stored_"):
-		var items := stored_for(r.inp.substr(7))
-		if items.is_empty():
-			return
-		for it in items:
-			_process_stored(it, r)
-		toast.emit("Processed %d stored items into %s" % [items.size(), goods_info(r.out)[0]])
-		_commit()
-		return
-	if not s.goods.has(r.inp):
-		return
-	var o: Dictionary = s.goods[r.inp]
-	_add(r.out, o.n, o.v * r.f)
-	s.goods.erase(r.inp)
-	toast.emit("Processed into %s" % goods_info(r.out)[0])
+	var value := _take(r.inp, 1)
+	_add(r.out, 1, value * r.f)
 	_commit()
 
 
