@@ -4,7 +4,7 @@ A cozy dredging, sorting and crafting game, built in **Godot 4** for release on 
 
 ## Playing it
 
-1. Install Godot 4.4 or newer: <https://godotengine.org/download>. Pick the standard **Godot Engine** build, not the .NET one.
+1. Install Godot 4.7: <https://godotengine.org/download>. Either the standard or the .NET editor works; the game only uses GDScript.
 2. Open Godot, click **Import**, and choose this folder's `project.godot`.
 3. Press **F5** (or the ▶ button, top right) to play.
 

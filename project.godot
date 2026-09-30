@@ -1,5 +1,5 @@
 ; Engine configuration file.
-; Open this folder in Godot 4.4 or newer (Standard edition, not .NET).
+; Built for Godot 4.7. The Standard and .NET editors both work (the game is GDScript only).
 
 config_version=5
 
@@ -8,7 +8,7 @@ config_version=5
 config/name="Shoal Tales"
 config/description="A cozy dredging, sorting and crafting game."
 run/main_scene="res://scenes/main.tscn"
-config/features=PackedStringArray("4.4")
+config/features=PackedStringArray("4.7")
 config/icon="res://icon.svg"
 
 [autoload]
