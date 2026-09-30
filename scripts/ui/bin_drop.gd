@@ -20,7 +20,12 @@ func _drop_data(_at_position: Vector2, data: Variant) -> void:
 func _gui_input(event: InputEvent) -> void:
 	var mb := event as InputEventMouseButton
 	if mb and mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
-		_deliver(int(Game.s.sel))
+		deliver_selected()
+
+
+## Sort whatever was picked up by clicking (also used by the 1–9 keys on the wheel).
+func deliver_selected() -> void:
+	_deliver(int(Game.s.sel))
 
 
 func _notification(what: int) -> void:

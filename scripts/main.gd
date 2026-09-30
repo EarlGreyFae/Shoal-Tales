@@ -59,8 +59,9 @@ var tab_bar: HBoxContainer
 var content: VBoxContainer
 var progress: ProgressBar
 var progress_label: Label
-var bin_nodes := {}
-var pending_impact := {}
+var wheel: Control
+var wheel_bins := {}
+var wheel_dragging := false
 var pending_pop := false
 var shown_coins := 0.0
 var inspect_uid := -1
@@ -154,7 +155,20 @@ func _unhandled_input(event: InputEvent) -> void:
 	# The ` key (left of 1), or Ctrl+Shift+D on keyboards without it. Function keys are avoided
 	# because the Godot editor uses them to run, pause and stop the game.
 	var key := event as InputEventKey
-	if not key or not key.pressed or key.echo or not OS.is_debug_build():
+	if not key or not key.pressed or key.echo:
+		return
+	if is_instance_valid(wheel) and not wheel_dragging:
+		if key.keycode == KEY_ESCAPE:
+			_close_wheel()
+			get_viewport().set_input_as_handled()
+			return
+		var n: int = int(key.keycode) - int(KEY_1)
+		var keys := _wheel_keys()
+		if n >= 0 and n < keys.size():
+			wheel_bins[keys[n]].deliver_selected()
+			get_viewport().set_input_as_handled()
+			return
+	if not OS.is_debug_build():
 		return
 	var backtick := key.physical_keycode == KEY_QUOTELEFT
 	var ctrl_shift_d := key.keycode == KEY_D and key.ctrl_pressed and key.shift_pressed
@@ -330,7 +344,6 @@ func refresh() -> void:
 		content.remove_child(c)
 		c.queue_free()
 	progress = null
-	bin_nodes = {}
 	match s.tab:
 		"dredge":
 			_page_dredge()
@@ -380,6 +393,11 @@ func _page_dredge() -> void:
 	v.add_child(progress)
 	progress_label = _label("", 14, C_DIM)
 	v.add_child(progress_label)
+	var tally: PackedStringArray = []
+	for k in Data.BIN_KEYS:
+		tally.append("%s %d" % [Data.BINS[k].e, int(s.goods.get("bin_" + k, {"n": 0}).n)])
+	tally.append("🧊 %d" % s.cooler.size())
+	v.add_child(_label("Bins:  " + "   ".join(tally), 14, C_DIM))
 
 	if has_catch:
 		var c := _card("Catch — clear it all to dredge again")
@@ -404,7 +422,7 @@ func _page_dredge() -> void:
 			nv.add_child(_para(note, C_INK, 15))
 		c.add_child(
 			_para(
-				"Drag junk into its bin and fish into the cooler. 🔍 Inspect gives a hint. There's no timer: getting it right in a row raises your payout (now ×%.2f)."
+				"Pick something up and the bin wheel opens around it: flick it onto a bin (fish go in the cooler). Or click it, then click a bin or press 1–9. 🔍 Inspect gives a hint. There's no timer: getting it right in a row raises your payout (now ×%.2f)."
 				% Game.streak_mult(),
 				C_DIM
 			)
@@ -412,48 +430,11 @@ func _page_dredge() -> void:
 	else:
 		progress_label.text = "The tray is empty. Drop the dredge, or sell what you've sorted in Storage."
 
-	var bc := _card("Sorting bins")
-	var grid := _grid(bc, ceili((Data.BIN_KEYS.size() + 1) / 2.0))
-	for k in Data.BIN_KEYS:
-		grid.add_child(_bin(k))
-	grid.add_child(_bin("cooler"))
 	var rules := _active_rules()
 	if not rules.is_empty():
-		bc.add_child(_para("Your stations have changed where some things go:", C_ACCENT, 14))
+		var rc := _card("Your stations have changed where some things go")
 		for line in rules:
-			bc.add_child(_para(line, C_DIM, 14))
-	if not pending_impact.is_empty() and bin_nodes.has(pending_impact.bin):
-		# Wait a frame so the freshly built bin has its size before it squashes.
-		get_tree().process_frame.connect(
-			_impact.bind(bin_nodes[pending_impact.bin], pending_impact), CONNECT_ONE_SHOT
-		)
-	pending_impact = {}
-
-
-func _bin(k: String) -> Control:
-	var cooler := k == "cooler"
-	var info: Dictionary = {"e": "🧊", "n": "Cooler"} if cooler else Data.BINS[k]
-	var count: int = Game.s.cooler.size() if cooler else Game.s.goods.get("bin_" + k, {"n": 0}).n
-	# A plain Control slot, so the bin inside can squash and shake without its container undoing it.
-	var slot := Control.new()
-	slot.custom_minimum_size = Vector2(0, 92)
-	slot.size_flags_horizontal = SIZE_EXPAND_FILL
-	var bin := BinDrop.new()
-	var fill := Color("10283a") if cooler else C_HEADER
-	bin.key = k
-	bin.accepts = "fish" if cooler else "junk"
-	bin.set_anchors_preset(PRESET_FULL_RECT)
-	bin.add_theme_stylebox_override("panel", _box(fill, C_LINE, 12, 2, 8))
-	slot.add_child(bin)
-	var v := VBoxContainer.new()
-	v.mouse_filter = MOUSE_FILTER_IGNORE
-	v.alignment = BoxContainer.ALIGNMENT_CENTER
-	bin.add_child(v)
-	for l in [_label(info.e, 30), _label(info.n), _label(("%d fish" if cooler else "%d sorted") % count, 13, C_DIM)]:
-		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		v.add_child(l)
-	bin_nodes[k] = bin
-	return slot
+			rc.add_child(_para(line, C_DIM, 14))
 
 
 func _active_rules() -> Array:
@@ -493,7 +474,10 @@ func _on_sorted(bin: String, correct: bool, weight: int, amount: float) -> void:
 	Sfx.play("drop_" + bin, 1.25 - 0.1 * weight, -12.0 + 2.5 * weight)
 	if not correct:
 		Sfx.play("wrong", 1.0, -8.0)
-	pending_impact = {"bin": bin, "correct": correct, "w": weight, "amount": amount}
+	if wheel_bins.has(bin):
+		_impact(wheel_bins[bin], {"correct": correct, "w": weight, "amount": amount})
+	# Linger so the impact plays, then fade.
+	_close_wheel(0.45)
 
 
 ## Squash the bin, shake the screen for heavy items, and float the payout up.
@@ -538,6 +522,7 @@ func _item_card(it: Dictionary) -> Control:
 		dc.kind = it.kind
 		dc.emoji = it.e
 		dc.weight = int(it.get("w", 2))
+		dc.picked.connect(_open_wheel)
 		p = dc
 	else:
 		p = PanelContainer.new()
@@ -1632,3 +1617,122 @@ func _show_dev() -> void:
 	var close := _button("Close", _close_modal)
 	close.size_flags_horizontal = SIZE_SHRINK_BEGIN
 	v.add_child(close)
+
+
+
+# ---------- bin wheel ----------
+
+
+func _wheel_keys() -> Array:
+	return Data.BIN_KEYS + ["cooler"]
+
+
+## A ring of bins around where an item was picked up. Drop (or click) onto one to sort.
+func _open_wheel(kind: String, at: Vector2, dragging: bool) -> void:
+	_close_wheel(0.0)
+	wheel_dragging = dragging
+	wheel = Control.new()
+	wheel.set_anchors_preset(PRESET_FULL_RECT)
+	wheel.mouse_filter = MOUSE_FILTER_IGNORE
+	add_child(wheel)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.3)
+	dim.set_anchors_preset(PRESET_FULL_RECT)
+	# Clicking outside the wheel closes it; while dragging, let drops fall through.
+	dim.mouse_filter = MOUSE_FILTER_IGNORE if dragging else MOUSE_FILTER_STOP
+	dim.gui_input.connect(_on_wheel_background)
+	wheel.add_child(dim)
+
+	var keys := _wheel_keys()
+	var radius := 200.0
+	var bin_size := Vector2(118, 96)
+	var margin := Vector2(radius, radius) + bin_size * 0.6
+	var centre := at.clamp(margin, size - margin)
+	var ring := Panel.new()
+	ring.mouse_filter = MOUSE_FILTER_IGNORE
+	ring.size = Vector2(radius, radius) * 2.0
+	ring.position = centre - Vector2(radius, radius)
+	var ring_box := _box(Color(0, 0, 0, 0), Color(C_LINE, 0.8), int(radius), 2, 0)
+	ring_box.draw_center = false
+	ring.add_theme_stylebox_override("panel", ring_box)
+	wheel.add_child(ring)
+	for i in keys.size():
+		var k: String = keys[i]
+		var angle := -PI / 2.0 + TAU * i / keys.size()
+		var bin := _wheel_bin(k, i + 1, bin_size)
+		var accepts := "fish" if k == "cooler" else "junk"
+		if accepts != kind:
+			bin.modulate.a = 0.3
+		bin.position = centre + Vector2(cos(angle), sin(angle)) * radius - bin_size * 0.5
+		wheel.add_child(bin)
+		wheel_bins[k] = bin
+	var hint := _label("drop on a bin · or press 1–%d · Esc to cancel" % keys.size(), 13, C_DIM)
+	hint.mouse_filter = MOUSE_FILTER_IGNORE
+	wheel.add_child(hint)
+	hint.position = centre + Vector2(-150, radius + bin_size.y * 0.6)
+	move_child(toasts, -1)
+
+	# Pop open.
+	wheel.pivot_offset = centre
+	wheel.scale = Vector2(0.85, 0.85)
+	wheel.modulate.a = 0.0
+	var tw := wheel.create_tween().set_parallel()
+	tw.tween_property(wheel, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(wheel, "modulate:a", 1.0, 0.1)
+
+
+func _wheel_bin(k: String, number: int, bin_size: Vector2) -> Control:
+	var cooler := k == "cooler"
+	var info: Dictionary = {"e": "🧊", "n": "Cooler"} if cooler else Data.BINS[k]
+	var count: int = Game.s.cooler.size() if cooler else Game.s.goods.get("bin_" + k, {"n": 0}).n
+	var bin := BinDrop.new()
+	bin.key = k
+	bin.accepts = "fish" if cooler else "junk"
+	bin.size = bin_size
+	bin.custom_minimum_size = bin_size
+	var fill := Color("10283a") if cooler else C_HEADER
+	bin.add_theme_stylebox_override("panel", _box(fill, C_ACCENT.darkened(0.4), 14, 2, 6))
+	var v := VBoxContainer.new()
+	v.mouse_filter = MOUSE_FILTER_IGNORE
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	bin.add_child(v)
+	for l in [
+		_label("%s  %d" % [info.e, number], 26),
+		_label(info.n, 15),
+		_label(("%d fish" if cooler else "%d sorted") % count, 12, C_DIM),
+	]:
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.mouse_filter = MOUSE_FILTER_IGNORE
+		v.add_child(l)
+	return bin
+
+
+func _close_wheel(delay := 0.0) -> void:
+	if not is_instance_valid(wheel):
+		return
+	var w := wheel
+	wheel = null
+	wheel_bins = {}
+	if delay <= 0.0:
+		w.queue_free()
+		return
+	w.mouse_filter = MOUSE_FILTER_IGNORE
+	for c in w.get_children():
+		if c is Control:
+			c.mouse_filter = MOUSE_FILTER_IGNORE
+	var tw := w.create_tween()
+	tw.tween_interval(delay)
+	tw.tween_property(w, "modulate:a", 0.0, 0.15)
+	tw.tween_callback(w.queue_free)
+
+
+func _on_wheel_background(event: InputEvent) -> void:
+	var mb := event as InputEventMouseButton
+	if mb and mb.pressed:
+		_close_wheel()
+
+
+func _notification(what: int) -> void:
+	# A drag that ends anywhere but a bin just closes the wheel.
+	if what == NOTIFICATION_DRAG_END and wheel_dragging:
+		_close_wheel(0.45)

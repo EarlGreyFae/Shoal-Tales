@@ -4,6 +4,9 @@ extends PanelContainer
 
 const Ghost := preload("res://scripts/ui/drag_ghost.gd")
 
+## Picked up by drag (dragging = true) or by click; the main screen opens the bin wheel here.
+signal picked(kind: String, at: Vector2, dragging: bool)
+
 var uid := -1
 var kind := "junk"
 var emoji := ""
@@ -20,6 +23,7 @@ func _get_drag_data(_at_position: Vector2) -> Variant:
 	set_drag_preview(ghost)
 	modulate.a = 0.3
 	Sfx.play("pickup", 1.2 - 0.06 * weight, -4.0)
+	picked.emit(kind, get_global_mouse_position(), true)
 	return {"uid": uid, "w": weight, "kind": kind}
 
 
@@ -29,6 +33,7 @@ func _gui_input(event: InputEvent) -> void:
 	if mb and mb.button_index == MOUSE_BUTTON_LEFT and not mb.pressed:
 		Sfx.play("pickup", 1.3, -8.0)
 		Game.select(uid)
+		picked.emit(kind, get_global_mouse_position(), false)
 
 
 func _notification(what: int) -> void:
